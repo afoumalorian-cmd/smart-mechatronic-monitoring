@@ -22,8 +22,8 @@ No hardware tests or motor wiring have been validated yet.
 - VS Code: main code and documentation editor
 - Arduino IDE 2.3.10: installed and opened
 - Git 2.54.0.windows.1: available
-- GitHub: not configured for this project yet
-
+- GitHub: https://github.com/afoumalorian-cmd/smart-mechatronic-monitoring
+- Current branch: chore/phase-0-project-setup
 ## Hardware Inventory
 
 | Component | Status |
@@ -61,7 +61,8 @@ No hardware tests or motor wiring have been validated yet.
 - [x] Record available batteries and motor information.
 - [x] Install and open Arduino IDE.
 - [x] Verify Git availability.
-- [ ] Complete initial repository documentation.
-- [ ] Configure the GitHub remote.
+- [x] Complete initial repository documentation.
+- [x] Configure the GitHub remote.
+- [x] Push initial documentation to GitHub.
 - [ ] Validate Arduino USB communication.
 - [ ] Resolve motor power supply requirements.
