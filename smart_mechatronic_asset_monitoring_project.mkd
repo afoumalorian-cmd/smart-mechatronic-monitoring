@@ -1,0 +1,1418 @@
+# Smart Mechatronic Asset Monitoring & Edge Data Platform
+
+## 1. Project Overview
+
+This project is an IoT, Mechatronics, Data Engineering, Backend, and Frontend platform built around the hardware already available:
+
+- Raspberry Pi 4
+- Arduino Uno-compatible board
+- DC geared motor
+- L298N motor driver
+- DHT11
+- DHT22
+- HC-SR04 ultrasonic sensor
+- PIR motion sensor
+- MQ-series gas sensor
+- Buzzer
+- LEDs
+- IR receiver
+- IR remote control
+- Bluetooth module
+- Breadboard
+- Jumper wires
+- Resistors
+- Battery / power supply
+
+The goal is to build a small connected mechatronic machine capable of:
+
+- controlling a motor;
+- monitoring its operating environment;
+- detecting obstacles and human presence;
+- generating real-time telemetry;
+- producing safety events and alerts;
+- storing historical data;
+- exposing data through a backend API;
+- displaying system status in a frontend dashboard;
+- creating analytics and anomaly detection workflows.
+
+The project is designed so that a future version can evolve naturally into a full **Industrial Predictive Maintenance Platform**.
+
+---
+
+# 2. Main Objective
+
+The goal is to build an end-to-end platform following this architecture:
+
+```text
+Physical Machine
+      ↓
+Sensors + Arduino
+      ↓
+Raspberry Pi 4
+      ↓
+    MQTT
+      ↓
+Data Ingestion
+      ↓
+Real-Time Storage
+      ↓
+Historical Data Lake
+      ↓
+Transformation / Analytics
+      ↓
+Backend API
+      ↓
+Frontend Dashboard
+      ↓
+Alerts / Anomaly Detection
+```
+
+The platform will allow us to:
+
+- start and stop the motor;
+- change motor direction;
+- control motor speed;
+- monitor temperature and humidity;
+- detect obstacles;
+- detect human presence;
+- monitor a gas/environment value;
+- activate visual and audible alarms;
+- generate machine events;
+- persist all telemetry;
+- analyze the machine's history;
+- build operational KPIs;
+- detect unusual behavior.
+
+---
+
+# 3. Physical System
+
+The DC motor will represent a small industrial asset.
+
+Possible interpretations:
+
+- conveyor system;
+- industrial fan;
+- motorized gate;
+- mobile robot;
+- automated handling system;
+- small production machine.
+
+For the first version, the yellow DC geared motor already available is sufficient.
+
+---
+
+# 4. Hardware Used
+
+| Component | Role |
+|---|---|
+| Raspberry Pi 4 | Edge Gateway and local server |
+| Arduino Uno-compatible | Hardware control and sensor acquisition |
+| DC geared motor | Physical machine being monitored |
+| L298N | Motor driver |
+| DHT22 | Main temperature and humidity sensor |
+| DHT11 | Secondary environmental sensor |
+| HC-SR04 | Distance and obstacle detection |
+| PIR sensor | Presence and motion detection |
+| MQ-series sensor | Gas / environmental monitoring |
+| Buzzer | Audible alarm |
+| LEDs | Visual machine status |
+| IR receiver | Local command reception |
+| IR remote | Manual machine control |
+| Bluetooth module | Optional local communication |
+| Breadboard | Circuit prototyping |
+| Jumper wires | Electrical connections |
+| Resistors | Supporting circuitry |
+| Battery / power supply | Motor/system power |
+
+---
+
+# 5. Motor Control
+
+The Arduino controls the DC motor through the L298N.
+
+```text
+Arduino
+   │
+   ├── PWM
+   ├── Direction A
+   └── Direction B
+          ↓
+        L298N
+          ↓
+      DC Motor
+```
+
+The system should support:
+
+```text
+STOP
+FORWARD
+REVERSE
+
+25%
+50%
+75%
+100%
+```
+
+or equivalent PWM-based speed levels.
+
+> Important: the motor voltage must be verified before connecting the 12 V battery. Many TT geared motors are designed for lower voltages such as 3–6 V.
+
+The Raspberry Pi should also use an appropriate independent power supply.
+
+---
+
+# 6. Telemetry Model
+
+A first telemetry event could look like:
+
+```json
+{
+  "device_id": "machine_001",
+  "timestamp": "2026-10-25T14:42:31Z",
+  "motor_state": "RUNNING",
+  "motor_direction": "FORWARD",
+  "motor_command": 75,
+  "temperature_c": 24.8,
+  "humidity_pct": 53.2,
+  "distance_cm": 72.4,
+  "presence_detected": false,
+  "gas_level": 317,
+  "alarm_state": false
+}
+```
+
+---
+
+# 7. HC-SR04 — Obstacle Detection
+
+The HC-SR04 measures distance.
+
+Example:
+
+```text
+Distance = 92 cm
+Distance = 71 cm
+Distance = 43 cm
+Distance = 14 cm
+```
+
+A safety rule can be created:
+
+```text
+distance < 20 cm
+        ↓
+Obstacle detected
+        ↓
+Stop motor
+        ↓
+Create event
+        ↓
+Send MQTT alert
+```
+
+This introduces automated safety logic and event-driven behavior.
+
+---
+
+# 8. PIR — Presence Detection
+
+The PIR sensor detects human motion or presence.
+
+Example:
+
+```text
+presence = TRUE
+```
+
+Possible industrial safety logic:
+
+```text
+Person detected
+      ↓
+Safety event
+      ↓
+Stop motor
+      ↓
+Buzzer
+      ↓
+Alert
+      ↓
+Event stored
+```
+
+---
+
+# 9. MQ-Series Sensor — Environmental Monitoring
+
+The MQ-series module can initially provide a raw gas/environment measurement.
+
+Example:
+
+```text
+gas_raw = 284
+```
+
+Later, thresholds can classify the state:
+
+```text
+NORMAL
+WARNING
+CRITICAL
+```
+
+The exact MQ model should be identified before interpreting the value as a specific gas concentration.
+
+---
+
+# 10. DHT22 and DHT11
+
+The DHT22 will be the main environmental sensor.
+
+It provides:
+
+```text
+temperature
+humidity
+```
+
+Example:
+
+```text
+temperature = 25.7 °C
+humidity = 51 %
+```
+
+The DHT11 can be used as:
+
+- a secondary measurement point;
+- a comparison sensor;
+- an environmental redundancy experiment.
+
+---
+
+# 11. LEDs and Buzzer
+
+The LEDs and buzzer represent machine status locally.
+
+Example:
+
+```text
+GREEN LED
+↓
+NORMAL
+
+YELLOW LED
+↓
+WARNING
+
+RED LED
++
+BUZZER
+↓
+CRITICAL
+```
+
+The same status will also be sent to the data platform.
+
+---
+
+# 12. IR Remote Control
+
+The IR remote and receiver can provide local machine commands.
+
+Example mapping:
+
+```text
+1 → Start
+2 → Stop
+3 → Forward
+4 → Reverse
+
+▲ → Increase speed
+▼ → Reduce speed
+```
+
+Commands should also generate events:
+
+```text
+14:30:04 USER_COMMAND START
+14:30:07 MOTOR_STARTED
+14:32:11 OBSTACLE_DETECTED
+14:32:11 EMERGENCY_STOP
+```
+
+This creates useful event logs for analytics.
+
+---
+
+# 13. Raspberry Pi 4 — Edge Gateway
+
+The Raspberry Pi acts as the Edge Gateway.
+
+Responsibilities:
+
+```text
+Arduino Serial Reader
+        ↓
+Validation
+        ↓
+MQTT Publisher
+        ↓
+Local Buffering
+        ↓
+Edge Processing
+```
+
+It may host:
+
+- Mosquitto;
+- Python collector;
+- InfluxDB;
+- Grafana;
+- Docker services;
+- local logs and buffering.
+
+---
+
+# 14. V1 System Architecture
+
+```text
+                    PHYSICAL SYSTEM
+
+ DHT22      HC-SR04      PIR       MQ Sensor
+   │           │          │            │
+   └───────────┴─────┬────┴────────────┘
+                     │
+                     ▼
+                  Arduino
+                     │
+              ┌──────┴──────┐
+              │             │
+           Sensors        Control
+                            │
+                         L298N
+                            │
+                         DC Motor
+                            │
+                    LED / Buzzer
+
+────────────────────────────────────────────
+
+                     EDGE
+
+                   USB Serial
+                       │
+                       ▼
+                Raspberry Pi 4
+                       │
+               Python Collector
+                       │
+                 Data Validation
+                       │
+                       ▼
+                 MQTT / Mosquitto
+
+────────────────────────────────────────────
+
+                 DATA PLATFORM
+
+                       MQTT
+                         │
+           ┌─────────────┼─────────────┐
+           ▼             ▼             ▼
+       InfluxDB       Data Writer     Alerts
+           │             │
+           │             ▼
+           │          RAW Parquet
+           │             │
+           │             ▼
+           │           Python
+           │           / Spark
+           │             │
+           │       Cleaning / Analytics
+           │             │
+           └───────┬─────┘
+                   ▼
+              PostgreSQL
+                   │
+                 FastAPI
+                   │
+            ┌──────┴──────┐
+            ▼             ▼
+          React         Grafana
+```
+
+---
+
+# 15. Data Architecture
+
+The platform will use:
+
+```text
+RAW
+ ↓
+SILVER
+ ↓
+GOLD
+```
+
+## RAW
+
+Raw telemetry exactly as received from the Raspberry Pi.
+
+Possible fields:
+
+```text
+timestamp
+device_id
+temperature
+humidity
+distance
+presence
+gas_raw
+motor_state
+motor_command
+```
+
+Minimal transformation should occur here.
+
+## SILVER
+
+The data becomes:
+
+- correctly typed;
+- cleaned;
+- deduplicated;
+- validated;
+- timestamp-normalized;
+- checked for impossible values.
+
+## GOLD
+
+Business- and analytics-ready datasets.
+
+Possible fields:
+
+```text
+machine_hourly_metrics
+
+avg_temperature
+max_temperature
+avg_humidity
+obstacle_count
+presence_count
+motor_runtime
+stop_count
+alarm_count
+gas_avg
+gas_max
+```
+
+---
+
+# 16. Data Quality
+
+Data quality rules will detect invalid or suspicious values.
+
+Examples:
+
+```text
+temperature = 250 °C
+→ INVALID
+
+humidity = -15 %
+→ INVALID
+
+distance = -1 cm
+→ SENSOR ERROR
+
+same event duplicated
+→ DUPLICATE
+
+timestamp missing
+→ INVALID
+
+sensor did not send data for 30 seconds
+→ SENSOR OFFLINE
+```
+
+Invalid data may be routed to:
+
+```text
+data/quarantine/
+```
+
+---
+
+# 17. Event Model
+
+Possible system events:
+
+```text
+MOTOR_STARTED
+MOTOR_STOPPED
+OBSTACLE_DETECTED
+PERSON_DETECTED
+HIGH_TEMPERATURE
+HIGH_GAS_LEVEL
+SENSOR_OFFLINE
+EMERGENCY_STOP
+```
+
+This makes the architecture event-driven instead of being only a stream of measurements.
+
+---
+
+# 18. MQTT Topics
+
+Suggested MQTT topic structure:
+
+```text
+factory/machine_001/telemetry
+factory/machine_001/status
+factory/machine_001/events
+factory/machine_001/alerts
+factory/machine_001/commands
+```
+
+Example alert payload:
+
+```json
+{
+  "type": "OBSTACLE_DETECTED",
+  "severity": "CRITICAL",
+  "distance_cm": 9.4
+}
+```
+
+---
+
+# 19. PostgreSQL
+
+PostgreSQL will store application and business data.
+
+Possible tables:
+
+```text
+machines
+sensors
+users
+alerts
+events
+maintenance_logs
+commands
+device_configuration
+```
+
+Example `machines` table:
+
+```text
+id
+name
+status
+location
+created_at
+```
+
+Example `alerts` table:
+
+```text
+id
+machine_id
+alert_type
+severity
+started_at
+resolved_at
+```
+
+---
+
+# 20. InfluxDB
+
+InfluxDB will store real-time telemetry such as:
+
+```text
+temperature
+humidity
+distance
+gas
+motor_command
+```
+
+Example:
+
+```text
+12:01:01  24.1
+12:01:02  24.1
+12:01:03  24.2
+12:01:04  24.3
+```
+
+This introduces time-series Data Engineering.
+
+---
+
+# 21. React Dashboard
+
+The user-facing application can display:
+
+```text
+SMART MACHINE 001
+
+STATUS
+🟢 RUNNING
+
+Motor
+Speed command      75%
+Direction          FORWARD
+
+Environment
+Temperature        24.7°C
+Humidity           54%
+
+Safety
+Obstacle distance  63 cm
+Presence           No
+Gas level          Normal
+
+SYSTEM HEALTH
+██████████████████░░ 91%
+
+Recent Events
+
+14:22 Motor started
+14:25 Presence detected
+14:25 Motor safety stop
+14:26 Motor restarted
+```
+
+---
+
+# 22. Grafana
+
+Grafana will be used for engineering and operational monitoring.
+
+Possible dashboards:
+
+```text
+Temperature over time
+Humidity over time
+Distance over time
+Gas sensor values
+Motor activity
+Alerts/hour
+Messages/sec
+Sensor availability
+```
+
+React and Grafana serve different purposes:
+
+- **React**: product/application UI
+- **Grafana**: technical/operations monitoring
+
+---
+
+# 23. Backend API
+
+FastAPI is recommended.
+
+Possible endpoints:
+
+```text
+GET /machines
+
+GET /machines/{id}
+
+GET /machines/{id}/telemetry
+
+GET /machines/{id}/status
+
+GET /machines/{id}/events
+
+GET /machines/{id}/alerts
+
+POST /machines/{id}/start
+
+POST /machines/{id}/stop
+
+POST /machines/{id}/direction
+
+POST /machines/{id}/speed
+```
+
+---
+
+# 24. Bidirectional Control
+
+The platform should support both telemetry and commands.
+
+Telemetry direction:
+
+```text
+Machine
+   ↓
+Arduino
+   ↓
+Raspberry Pi
+   ↓
+MQTT
+   ↓
+Data Platform
+```
+
+Command direction:
+
+```text
+React Dashboard
+      ↓
+FastAPI
+      ↓
+MQTT
+      ↓
+Raspberry Pi
+      ↓
+Arduino
+      ↓
+L298N
+      ↓
+Motor
+```
+
+Example:
+
+```text
+CLICK START
+    ↓
+HTTP API
+    ↓
+MQTT command
+    ↓
+Pi
+    ↓
+Arduino
+    ↓
+L298N
+    ↓
+MOTOR STARTS
+```
+
+---
+
+# 25. Technology Stack
+
+| Domain | Technology |
+|---|---|
+| Embedded | Arduino |
+| Edge | Raspberry Pi 4 |
+| Motor Control | L298N |
+| IoT Protocol | MQTT |
+| MQTT Broker | Mosquitto |
+| Edge Software | Python |
+| Time-Series Storage | InfluxDB |
+| Metadata / Business DB | PostgreSQL |
+| Data Lake | Parquet |
+| Data Processing | Python, later PySpark |
+| Backend | FastAPI |
+| Frontend | React |
+| Visualization | Grafana |
+| Containers | Docker |
+| Tests | pytest |
+| CI/CD | GitHub Actions |
+| Version Control | Git / GitHub |
+
+Possible future technologies:
+
+```text
+Kafka
+Airflow
+MinIO
+MLflow
+Prometheus
+AWS
+Terraform
+```
+
+These should only be added when they solve a real project need.
+
+---
+
+# 26. Repository Structure
+
+```text
+smart-mechatronic-monitoring/
+│
+├── firmware/
+│   │
+│   └── arduino/
+│       ├── sensors/
+│       ├── motor/
+│       ├── safety/
+│       └── main.ino
+│
+├── edge/
+│   │
+│   ├── serial/
+│   ├── mqtt/
+│   ├── validation/
+│   ├── commands/
+│   ├── buffering/
+│   └── tests/
+│
+├── backend/
+│   │
+│   ├── app/
+│   │   ├── api/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── main.py
+│   │
+│   └── tests/
+│
+├── frontend/
+│
+├── pipelines/
+│   │
+│   ├── ingestion/
+│   ├── cleaning/
+│   ├── transformations/
+│   ├── aggregations/
+│   └── quality/
+│
+├── data/
+│   ├── raw/
+│   ├── quarantine/
+│   ├── silver/
+│   └── gold/
+│
+├── analytics/
+│   ├── machine_health/
+│   ├── safety/
+│   └── environment/
+│
+├── monitoring/
+│   ├── grafana/
+│   └── alerts/
+│
+├── infrastructure/
+│   ├── docker/
+│   └── docker-compose.yml
+│
+├── tests/
+│
+├── docs/
+│   ├── hardware/
+│   ├── architecture/
+│   ├── data/
+│   └── api/
+│
+├── scripts/
+│
+├── .env.example
+├── .gitignore
+├── pyproject.toml
+├── README.md
+└── docker-compose.yml
+```
+
+This is the target repository structure. It should not be created all at once.
+
+---
+
+# 27. Project Phases
+
+## Phase 0 — Project Understanding
+
+Understand:
+
+- business/use-case problem;
+- architecture;
+- hardware;
+- role of every component;
+- end-to-end data flow.
+
+---
+
+## Phase 1 — Hardware Inventory
+
+Identify and document all available hardware.
+
+Examples:
+
+```text
+Arduino
+Raspberry Pi
+DHT22
+DHT11
+HC-SR04
+PIR
+MQ sensor
+L298N
+Motor
+IR receiver
+Bluetooth
+LEDs
+Buzzer
+```
+
+---
+
+## Phase 2 — Motor Control
+
+First physical objective:
+
+```text
+Arduino
+ ↓
+L298N
+ ↓
+Motor
+```
+
+Implement:
+
+- start;
+- stop;
+- forward;
+- reverse;
+- speed control.
+
+---
+
+## Phase 3 — Environmental Sensors
+
+Add and test individually:
+
+```text
+DHT22
+DHT11
+PIR
+HC-SR04
+MQ sensor
+```
+
+Each sensor should work independently before integration.
+
+---
+
+## Phase 4 — Sensor Integration
+
+The Arduino reads all sensors and creates a consistent telemetry payload.
+
+Example:
+
+```json
+{
+  "device_id": "machine_001",
+  "temperature_c": 24.5,
+  "humidity_pct": 53,
+  "distance_cm": 75,
+  "presence_detected": false,
+  "gas_raw": 280
+}
+```
+
+---
+
+## Phase 5 — Safety Automation
+
+Create rules such as:
+
+```text
+Obstacle
+→ STOP
+
+Presence
+→ WARNING / STOP
+
+Gas alert
+→ ALARM
+```
+
+---
+
+## Phase 6 — Raspberry Pi Edge Gateway
+
+Create the first IoT connection:
+
+```text
+Arduino
+ ↓
+USB Serial
+ ↓
+Raspberry Pi
+```
+
+---
+
+## Phase 7 — MQTT
+
+Build:
+
+```text
+Arduino
+ ↓
+Pi
+ ↓
+Mosquitto
+ ↓
+MQTT
+```
+
+Define topics and message formats.
+
+---
+
+## Phase 8 — Real-Time Storage
+
+Install and configure:
+
+```text
+InfluxDB
+```
+
+Start persisting telemetry.
+
+---
+
+## Phase 9 — Grafana
+
+Create dashboards showing:
+
+```text
+temperature vs time
+humidity vs time
+distance vs time
+motor state
+gas values
+alerts
+```
+
+---
+
+## Phase 10 — Historical Data Lake
+
+Store historical telemetry:
+
+```text
+RAW
+ ↓
+Parquet
+```
+
+---
+
+## Phase 11 — Data Quality
+
+Implement:
+
+- type validation;
+- null checks;
+- range checks;
+- deduplication;
+- timestamp validation;
+- offline sensor detection;
+- quarantine.
+
+---
+
+## Phase 12 — Silver / Gold Pipeline
+
+Build:
+
+```text
+RAW
+ ↓
+SILVER
+ ↓
+GOLD
+```
+
+---
+
+## Phase 13 — PostgreSQL
+
+Create application and event storage.
+
+Examples:
+
+```text
+machines
+sensors
+events
+alerts
+commands
+maintenance_logs
+```
+
+---
+
+## Phase 14 — FastAPI
+
+Expose machine data and commands through a REST API.
+
+---
+
+## Phase 15 — React
+
+Create the user-facing dashboard.
+
+---
+
+## Phase 16 — Remote Control
+
+Implement:
+
+```text
+React
+ ↓
+FastAPI
+ ↓
+MQTT
+ ↓
+Pi
+ ↓
+Arduino
+ ↓
+Motor
+```
+
+---
+
+## Phase 17 — Analytics
+
+Create KPIs such as:
+
+```text
+motor_runtime
+number_of_stops
+number_of_safety_stops
+average_temperature
+maximum_temperature
+obstacle_count
+presence_count
+alarm_count
+sensor_uptime
+```
+
+---
+
+## Phase 18 — Spark
+
+Only after enough historical data exists:
+
+```text
+Parquet
+ ↓
+PySpark
+ ↓
+Historical Analytics
+```
+
+Possible uses:
+
+- large historical aggregations;
+- feature engineering;
+- performance comparisons;
+- window analytics.
+
+---
+
+## Phase 19 — Anomaly Detection
+
+Possible anomaly scenarios:
+
+```text
+Unusual temperature
+Abnormal sensor pattern
+Too many stops
+Unexpected gas values
+Unusual environment
+Sensor malfunction
+```
+
+Start with rules/statistics before introducing ML.
+
+---
+
+## Phase 20 — CI/CD, Testing and Documentation
+
+Finalize the project with:
+
+- unit tests;
+- integration tests;
+- hardware test procedures;
+- linting;
+- formatting;
+- GitHub Actions;
+- Docker;
+- API documentation;
+- architecture diagrams;
+- README;
+- portfolio screenshots.
+
+---
+
+# 28. Future Evolution Toward Predictive Maintenance
+
+The project will not abandon predictive maintenance.
+
+Instead, this V1 becomes its foundation.
+
+Current scope:
+
+```text
+Condition Monitoring
++
+IoT
++
+Data Engineering
++
+Automation
+```
+
+Future hardware additions:
+
+```text
+ADXL345
+↓
+Vibration
+
+INA219
+↓
+Current / Power
+
+Hall Sensor
+↓
+Real RPM
+```
+
+Then the architecture evolves into:
+
+```text
+Smart Mechatronic Monitoring
+            ↓
+Condition Monitoring
+            ↓
+Anomaly Detection
+            ↓
+Predictive Maintenance
+```
+
+The existing architecture can be reused almost unchanged.
+
+---
+
+# 29. Skills Developed
+
+This project develops skills across several domains.
+
+## Mechatronics
+
+- DC motor control;
+- motor driver usage;
+- sensors;
+- actuators;
+- safety logic;
+- hardware integration.
+
+## Embedded Systems
+
+- Arduino;
+- digital/analog inputs;
+- PWM;
+- serial communication;
+- sensor acquisition.
+
+## IoT
+
+- MQTT;
+- telemetry;
+- device commands;
+- event-driven architecture;
+- edge gateway design.
+
+## Data Engineering
+
+- ingestion;
+- data validation;
+- time-series data;
+- Parquet;
+- RAW/SILVER/GOLD architecture;
+- data quality;
+- analytics;
+- PySpark.
+
+## Backend
+
+- FastAPI;
+- REST APIs;
+- PostgreSQL;
+- command and telemetry services.
+
+## Frontend
+
+- React;
+- real-time dashboard;
+- machine status visualization;
+- alerts.
+
+## Observability
+
+- Grafana;
+- telemetry monitoring;
+- alert monitoring;
+- device availability.
+
+## DevOps
+
+- Docker;
+- Docker Compose;
+- CI/CD;
+- testing;
+- Git/GitHub.
+
+---
+
+# 30. Portfolio Description
+
+A possible final portfolio description:
+
+> **Smart Mechatronic Asset Monitoring Platform** — Designed and developed an end-to-end IoT and Data Engineering platform integrating Arduino-based sensors and motor control with a Raspberry Pi edge gateway, MQTT telemetry, time-series storage, Parquet data lake, real-time monitoring, FastAPI services and a React dashboard. Implemented automated safety events, data-quality pipelines and historical analytics.
+
+This project connects:
+
+```text
+Mechatronics / Robotics
+          +
+Data Engineering
+          +
+IoT
+          +
+Backend
+          +
+Frontend
+```
+
+---
+
+# 31. Immediate Next Step
+
+The next step is:
+
+## Phase 0 / Phase 1 — Hardware Inventory
+
+Before wiring anything:
+
+1. identify every sensor and module available;
+2. identify the exact model/reference where possible;
+3. decide which components belong to V1;
+4. document their voltage and pin requirements;
+5. define the exact wiring plan;
+6. verify power requirements;
+7. only then begin the first motor-control circuit.
+
+No hardware should be connected until the motor voltage, sensor voltages, Raspberry Pi voltage levels, and L298N wiring have been verified.

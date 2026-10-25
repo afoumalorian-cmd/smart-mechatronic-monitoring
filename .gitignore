@@ -1,0 +1,29 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+
+# Generated firmware build files
+build/
+*.elf
+*.hex
+
+# Local data and logs
+data/
+*.log
+
+# Operating system files
+Thumbs.db
+.DS_Store
