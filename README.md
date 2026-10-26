@@ -14,7 +14,9 @@ primarily with existing hardware.
 
 Phase 0 — Hardware inventory and development environment preparation.
 
-No hardware tests or motor wiring have been validated yet.
+USB power and board detection verified: ON LED lit, Arduino UNO
+detected and selected on COM5. Firmware upload and serial data
+exchange remain untested. Motor wiring remains unvalidated.
 
 ## Development Environment
 
