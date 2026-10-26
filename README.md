@@ -42,8 +42,10 @@ at 9600 baud.
 
 These responses verify command handling in the Arduino program.
 Control-pin voltages and driver outputs have not been measured.
-No motor or battery was connected; the motor supply terminal
-marked +12V was left disconnected.
+One yellow geared motor is now connected to OUT1 and OUT2.
+Wiring was performed with all power disconnected.
+No battery is connected; the motor supply terminal marked +12V
+remains disconnected. Motor operation has not been tested.
 
 Motor operation remains untested pending a suitable motor power
 supply and a multimeter.
