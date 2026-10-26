@@ -66,5 +66,6 @@ exchange remain untested. Motor wiring remains unvalidated.
 - [x] Complete initial repository documentation.
 - [x] Configure the GitHub remote.
 - [x] Push initial documentation to GitHub.
-- [ ] Validate Arduino USB communication.
+- [x] Verify Arduino USB power and board detection (COM5).
+- [ ] Validate firmware upload and serial data exchange.
 - [ ] Resolve motor power supply requirements.
