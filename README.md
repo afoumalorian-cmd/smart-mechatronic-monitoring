@@ -21,8 +21,12 @@ Blink sketch compiled and uploaded successfully. The built-in LED
 was observed blinking continuously with a programmed interval of
 one second on and one second off.
 
-Serial data exchange remains untested. Motor wiring remains
-unvalidated.
+Serial communication verified at 9600 baud:
+- Arduino-to-PC periodic counter received in Serial Monitor.
+- PC-to-Arduino commands: 1 turns the built-in LED on;
+  0 turns it off, with LED ON / LED OFF acknowledgements.
+
+Motor wiring remains unvalidated.
 
 ## Development Environment
 
@@ -73,5 +77,5 @@ unvalidated.
 - [x] Push initial documentation to GitHub.
 - [x] Verify Arduino USB power and board detection (COM5).
 - [x] Validate firmware upload and built-in LED blinking.
-- [ ] Validate serial data exchange.
+- [x] Validate serial data exchange.
 - [ ] Resolve motor power supply requirements.
