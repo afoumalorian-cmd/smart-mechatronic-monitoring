@@ -12,25 +12,30 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 0 — Hardware inventory and development environment preparation.
+Phase 1 - Initial Arduino tests.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
-detected and selected on COM5. Firmware upload and serial data
-exchange remain untested. Motor wiring remains unvalidated.
+detected and selected on COM5.
+
+Blink sketch compiled and uploaded successfully. The built-in LED
+was observed blinking continuously with a programmed interval of
+one second on and one second off.
+
+Serial data exchange remains untested. Motor wiring remains
+unvalidated.
 
 ## Development Environment
 
 - Windows and PowerShell
 - VS Code: main code and documentation editor
-- Arduino IDE 2.3.10: installed and opened
+- Arduino IDE 2.3.10: Blink compilation and upload verified
 - Git 2.54.0.windows.1: available
 - GitHub: https://github.com/afoumalorian-cmd/smart-mechatronic-monitoring
-- Current branch: chore/phase-0-project-setup
+- Current branch: feature/phase-1-arduino-tests
 ## Hardware Inventory
-
 | Component | Status |
 |---|---|
-| KEYES Uno-compatible board / ATmega328P | Visually identified; untested |
+| KEYES Uno-compatible board / ATmega328P | USB detection, Blink upload and execution verified |
 | L298N HW-095 motor driver | Visually identified; untested |
 | Yellow DC geared motors | 6 available; 5 V maximum reported by owner |
 | ROBITON AGM VRLA battery | Label: 12 V, 1.3 Ah; condition unverified |
@@ -67,5 +72,6 @@ exchange remain untested. Motor wiring remains unvalidated.
 - [x] Configure the GitHub remote.
 - [x] Push initial documentation to GitHub.
 - [x] Verify Arduino USB power and board detection (COM5).
-- [ ] Validate firmware upload and serial data exchange.
+- [x] Validate firmware upload and built-in LED blinking.
+- [ ] Validate serial data exchange.
 - [ ] Resolve motor power supply requirements.
