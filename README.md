@@ -50,6 +50,19 @@ remains disconnected. Motor operation has not been tested.
 Motor operation remains untested pending a suitable motor power
 supply and a multimeter.
 
+
+### Additional Experimental Sketches
+
+- servo_test: SG90 position commands on D9; movement not validated.
+- button_led_buzzer_test: button on A2, LED on A1 and buzzer on A3;
+  integrated operation not yet confirmed.
+- l298n_control_test: updated with a three-second automatic stop
+  and support for lowercase commands; this revision remains untested.
+
+Each sketch must be uploaded separately with its matching wiring.
+The servo and L298N sketches both use D9 and require different wiring.
+Motor operation remains pending a suitable external power supply.
+
 ## Development Environment
 
 - Windows and PowerShell
