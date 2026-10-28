@@ -31,21 +31,27 @@ void setup() {
   digitalWrite(MOTOR_B_DIRECTION, LOW);
 
   Serial.begin(9600);
-  Serial.println("Ready: T = 5000 ms test, S = stop.");
+  Serial.println("Ready: F/T = forward, R = reverse, S = stop.");
 }
 
 void loop() {
   if (Serial.available() > 0) {
     char command = Serial.read();
 
-    if ((command == 'T' || command == 't') && !testRunning) {
-      digitalWrite(MOTOR_A_DIRECTION, HIGH);
+    if ((command == 'T' || command == 't' ||
+         command == 'F' || command == 'f' ||
+         command == 'R' || command == 'r') && !testRunning) {
+
+      bool reverse = (command == 'R' || command == 'r');
+      digitalWrite(MOTOR_A_DIRECTION, reverse ? LOW : HIGH);
 
       testStartedAt = millis();
       testRunning = true;
       analogWrite(MOTOR_A_PWM, TEST_PWM);
 
-      Serial.println("Test command started.");
+      Serial.println(reverse
+                         ? "Control state: REVERSE"
+                         : "Control state: FORWARD");
     } else if (command == 'S' || command == 's') {
       stopMotor();
       Serial.println("STOP");

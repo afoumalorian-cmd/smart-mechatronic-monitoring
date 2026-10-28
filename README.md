@@ -57,7 +57,9 @@ Test configuration:
 - Channel A: D6 for PWM and D2 for direction.
 - Channel B disabled.
 - Serial Monitor configured at 9600 baud.
-- T starts a timed test; S requests a stop.
+- F or T starts a forward timed test; R starts a reverse timed test.
+- S requests a stop.
+- Motion commands received during an active test are ignored.
 - Saved sketch settings: PWM 150 and duration 5000 ms.
 
 Motor rotation was observed during the five-second test at PWM 150.
@@ -70,6 +72,11 @@ Motor voltage, current, RPM and prolonged operation remain unverified.
 PWM does not regulate the motor supply to 5 V.
 Sending S during motor rotation stopped the motor before the
 five-second timeout.
+
+Forward and reverse motor rotation were observed using F and R.
+The stop command and five-second automatic stop were also verified
+with this updated sketch. The motor was allowed to stop completely
+before changing direction.
 
 ### Additional Experimental Sketches
 
@@ -144,3 +151,4 @@ The servo and L298N sketches both use D9 and require different wiring.
 - [ ] Measure motor supply voltage and current.
 - [ ] Confirm motor ratings and validate prolonged operation.
 - [x] Verify the S command stops the motor during a timed test.
+- [x] Verify forward and reverse motor rotation through serial commands.
