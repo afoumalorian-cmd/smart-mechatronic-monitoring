@@ -60,7 +60,10 @@ Test configuration:
 - F or T starts a forward timed test; R starts a reverse timed test.
 - S requests a stop.
 - Motion commands received during an active test are ignored.
-- Saved sketch settings: PWM 150 and duration 5000 ms.
+- Initial PWM: 150; timed test duration: 5000 ms.
+- Commands 1, 2 and 3 select PWM 100, 125 and 150 respectively.
+- PWM can be changed during rotation without restarting the timeout.
+- A one-second restart delay is enforced after stopping.
 
 Motor rotation was observed during the five-second test at PWM 150.
 A higher speed was observed during an additional test at PWM 250.
@@ -152,3 +155,4 @@ The servo and L298N sketches both use D9 and require different wiring.
 - [ ] Confirm motor ratings and validate prolonged operation.
 - [x] Verify the S command stops the motor during a timed test.
 - [x] Verify forward and reverse motor rotation through serial commands.
+- [x] Verify serial PWM selection using presets 100, 125 and 150.
