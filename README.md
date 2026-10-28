@@ -68,6 +68,8 @@ rotation was obtained after correcting the assignment to D6.
 These observations confirm basic motor actuation with this setup.
 Motor voltage, current, RPM and prolonged operation remain unverified.
 PWM does not regulate the motor supply to 5 V.
+Sending S during motor rotation stopped the motor before the
+five-second timeout.
 
 ### Additional Experimental Sketches
 
@@ -141,3 +143,4 @@ The servo and L298N sketches both use D9 and require different wiring.
 - [x] Observe increased motor speed when PWM changes from 150 to 250.
 - [ ] Measure motor supply voltage and current.
 - [ ] Confirm motor ratings and validate prolonged operation.
+- [x] Verify the S command stops the motor during a timed test.
