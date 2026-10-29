@@ -12,8 +12,8 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 2 - DHT22 acquisition and local Python telemetry collection.
-Motor control tests from Phase 1 are preserved.
+Phase 3 - Local SQLite storage of validated telemetry.
+Motor control and DHT22 acquisition results from previous phases are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
 detected and selected on COM5.
@@ -170,6 +170,72 @@ valid, with no sensor error events or invalid records.
 A synthetic humidity value of 120% was correctly rejected.
 Sensor accuracy has not been independently verified.
 
+## Local SQLite Storage
+
+Validated telemetry is imported using Python's built-in sqlite3 module.
+SQLite version observed in the project environment: 3.45.3.
+No additional Python dependency is required.
+
+### Import Command
+
+Run from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe .\processing\import_sqlite.py --input .\data\validated\20261029T152121_8908f98ecfdf41fc822910703e19e905\valid.jsonl
+```
+
+The default database is data/local/telemetry.sqlite3.
+Use --database to select a different database path.
+Local databases remain excluded from Git through the data/ rule.
+
+### Schema and Traceability
+
+- import_runs stores successful import execution IDs, UTC import
+  timestamps, source file paths and record counts.
+- measurements stores collection metadata and DHT22 measurements.
+- Each measurement references the import that first inserted it
+  and retains its line number in the validated source file.
+- The unique key is (session_id, device_id, sequence).
+- An index on (device_id, received_at_utc) supports device/time queries.
+
+The importer reuses validate_record() from validate_telemetry.py.
+Only records classified as valid are accepted.
+RAW and validated source files remain unchanged.
+
+Identical existing measurements are skipped.
+An existing key with different measurement content causes a conflict.
+Each file import uses one transaction: a rejected record or conflict
+rolls back all measurements and the history row from that import.
+
+The unique-key design assumes that sequence numbers do not restart
+within the same collection session. Arduino restarts within an active
+collector session are not automatically handled.
+
+### Observed Results
+
+- Syntax check completed successfully.
+- First import: 177 records read, 177 inserted, 0 duplicates.
+- Repeated import: 177 records read, 0 inserted, 177 duplicates.
+- Read-only SQL queries confirmed 177 measurements and two import runs.
+- Device: machine_001.
+- Reception period: 2026-10-29T14:29:13.598852+00:00 to
+  2026-10-29T14:38:02.540166+00:00.
+
+| Measurement | Minimum | Average | Maximum |
+|---|---:|---:|---:|
+| Temperature (°C) | 24.4 | 24.66 | 25.0 |
+| Relative humidity (%) | 43.8 | 44.46 | 47.5 |
+
+A synthetic conflict test used a separate temporary database.
+A new measurement followed by a conflicting existing key was rejected.
+Counts remained unchanged at 177 measurements and one import run,
+confirming rollback of the entire attempted import.
+The corrected test explicitly closed its SQLite connections,
+and temporary file cleanup completed successfully.
+
+These statistics describe recorded readings.
+Sensor accuracy has not been independently verified.
+
 ## Development Environment
 
 - Windows and PowerShell
@@ -177,7 +243,7 @@ Sensor accuracy has not been independently verified.
 - Arduino IDE 2.3.10: sketch compilation, upload and Serial Monitor verified
 - Git 2.54.0.windows.1: available
 - GitHub: https://github.com/afoumalorian-cmd/smart-mechatronic-monitoring
-- Current branch: feature/phase-2-sensor-acquisition
+- Current branch: feature/phase-3-local-storage
 - Python 3.12.6 with a project-local .venv
 - pyserial 3.5
 
@@ -241,3 +307,8 @@ Sensor accuracy has not been independently verified.
 - [x] Collect telemetry with Python and add UTC reception timestamps.
 - [x] Persist a collection session containing 177 JSONL records.
 - [x] Validate telemetry fields and measurement ranges.
+- [x] Import validated telemetry into local SQLite storage.
+- [x] Preserve source-file and source-line traceability.
+- [x] Verify repeated imports skip identical measurements.
+- [x] Query stored measurements and calculate summary statistics.
+- [x] Verify conflicting records roll back the entire import.
