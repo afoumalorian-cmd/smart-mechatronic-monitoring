@@ -12,8 +12,8 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 1 - Arduino tests completed; first motor rotation observed
-using the KEYES L298P V1 shield.
+Phase 2 - DHT22 acquisition and local Python telemetry collection.
+Motor control tests from Phase 1 are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
 detected and selected on COM5.
@@ -92,6 +92,58 @@ before changing direction.
 Each sketch must be uploaded separately with its matching wiring.
 The servo and L298N sketches both use D9 and require different wiring.
 
+## DHT22 Telemetry Acquisition
+
+### Wiring and Firmware
+
+- Three-pin DHT22 module: + to 5V, OUT to D7, - to GND.
+- Motor and BAT disconnected during sensor acquisition.
+- Arduino powered through USB.
+- Sketch: firmware/dht22_telemetry/dht22_telemetry.ino.
+- Arduino libraries: DHT sensor library by Adafruit and
+  Adafruit Unified Sensor.
+- One JSON object emitted every three seconds at 9600 baud.
+- Fields: device_id, sequence, uptime_ms, sensor, status,
+  temperature_c and humidity_pct.
+- Failed sensor readings emit status="error" and null measurements.
+
+Temperature and humidity readings were received successfully.
+A response to warmer, humid air was observed; sensor accuracy
+has not been independently verified.
+
+### Python Collector
+
+Requires Python 3.12.6 and pyserial 3.5.
+
+Create the environment and install dependencies from the project root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Close Arduino Serial Monitor before starting collection:
+
+```powershell
+.\.venv\Scripts\python.exe .\collector\serial_collector.py --port COM5
+```
+
+Press Ctrl+C to stop collection and close the serial port.
+
+Each session creates a JSONL file under data/raw/.
+Every record contains:
+- received_at_utc: PC reception-processing time in UTC.
+- session_id: identifier shared by records from this collector run.
+- telemetry: the original parsed Arduino JSON object.
+
+A completed collection produced a file containing 177 records.
+The first three persisted records were inspected and contained
+UTC reception timestamps, a common session ID and sensor readings.
+
+The collector skips malformed JSON and retains sensor error events.
+Telemetry field validation and reconnection are not implemented yet.
+Local environments and collected data are excluded from Git.
+
 ## Development Environment
 
 - Windows and PowerShell
@@ -99,7 +151,9 @@ The servo and L298N sketches both use D9 and require different wiring.
 - Arduino IDE 2.3.10: sketch compilation, upload and Serial Monitor verified
 - Git 2.54.0.windows.1: available
 - GitHub: https://github.com/afoumalorian-cmd/smart-mechatronic-monitoring
-- Current branch: feature/phase-1-l298n-motor-control
+- Current branch: feature/phase-2-sensor-acquisition
+- Python 3.12.6 with a project-local .venv
+- pyserial 3.5
 
 ## Hardware Inventory
 
@@ -115,6 +169,7 @@ The servo and L298N sketches both use D9 and require different wiring.
 | Raspberry Pi 4 and sensors | Reported available; detailed inventory pending |
 | KEYES L298P V1 shield | Motor rotation observed on A1 using D6 PWM and D2 direction |
 | Six-cell AA battery holder with alkaline cells | Connected to shield BAT; 9 V nominal, voltage not measured |
+| DHT22 three-pin module | Temperature and humidity acquisition verified on D7 |
 
 ## Open Hardware Questions
 
@@ -156,3 +211,7 @@ The servo and L298N sketches both use D9 and require different wiring.
 - [x] Verify the S command stops the motor during a timed test.
 - [x] Verify forward and reverse motor rotation through serial commands.
 - [x] Verify serial PWM selection using presets 100, 125 and 150.
+- [x] Acquire DHT22 temperature and humidity as serial JSON.
+- [x] Collect telemetry with Python and add UTC reception timestamps.
+- [x] Persist a collection session containing 177 JSONL records.
+- [ ] Validate telemetry fields and measurement ranges.
