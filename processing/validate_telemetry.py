@@ -104,30 +104,13 @@ def reject_constant(value):
     raise ValueError(f"Invalid JSON constant: {value}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--input",
-        type=Path,
-        help="RAW JSONL file; defaults to the latest modified RAW file.",
-    )
-    args = parser.parse_args()
-
+def validate_file(input_path):
+    """Classify one RAW file and return its output directory and summary."""
+    input_path = Path(input_path).resolve()
     project_root = Path(__file__).resolve().parents[1]
 
-    if args.input is None:
-        candidates = list(
-            (project_root / "data" / "raw").glob("telemetry_*.jsonl")
-        )
-        if not candidates:
-            parser.error("No RAW telemetry file found.")
-
-        input_path = max(candidates, key=lambda path: path.stat().st_mtime)
-    else:
-        input_path = args.input.resolve()
-
     if not input_path.is_file():
-        parser.error(f"Input file not found: {input_path}")
+        raise FileNotFoundError(f"Input file not found: {input_path}")
 
     # Each execution gets a new directory, preserving earlier results.
     run_name = (
@@ -207,11 +190,41 @@ def main():
     ) as output:
         json.dump(summary, output, indent=2, allow_nan=False)
 
+    return output_dir, summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input",
+        type=Path,
+        help="RAW JSONL file; defaults to the latest modified RAW file.",
+    )
+    args = parser.parse_args()
+
+    project_root = Path(__file__).resolve().parents[1]
+
+    if args.input is None:
+        candidates = list(
+            (project_root / "data" / "raw").glob("telemetry_*.jsonl")
+        )
+        if not candidates:
+            parser.error("No RAW telemetry file found.")
+
+        input_path = max(candidates, key=lambda path: path.stat().st_mtime)
+    else:
+        input_path = args.input.resolve()
+
+    if not input_path.is_file():
+        parser.error(f"Input file not found: {input_path}")
+
+    output_dir, summary = validate_file(input_path)
+
     print(json.dumps(summary, indent=2))
     print(f"Results: {output_dir}")
 
     # Sensor failures are separate from invalid record structure.
-    return 1 if counts["invalid"] else 0
+    return 1 if summary["counts"]["invalid"] else 0
 
 
 if __name__ == "__main__":
