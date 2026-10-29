@@ -179,6 +179,33 @@ def import_records(connection, input_path):
     }
 
 
+def import_file(input_path, database_path):
+    """Open SQLite, import one file, and always close the connection."""
+    input_path = Path(input_path).resolve()
+    database_path = Path(database_path).resolve()
+
+    if not input_path.is_file():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+
+    if database_path == input_path:
+        raise ValueError("The database and input paths must be different.")
+
+    connection = None
+
+    try:
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(database_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.executescript(SCHEMA)
+
+        return import_records(connection, input_path)
+
+    finally:
+        # Transaction handling does not close the SQLite connection.
+        if connection is not None:
+            connection.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -210,28 +237,12 @@ def main():
     if database_path == input_path:
         parser.error("The database and input paths must be different.")
 
-    connection = None
-
     try:
-        database_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(database_path)
-
-        # SQLite requires foreign-key enforcement on each connection.
-        connection.execute("PRAGMA foreign_keys = ON")
-
-        # Create tables once; subsequent imports reuse them.
-        connection.executescript(SCHEMA)
-
-        summary = import_records(connection, input_path)
+        summary = import_file(input_path, database_path)
 
     except (OSError, ValueError, sqlite3.Error) as exc:
         print(f"Import failed: {exc}")
         return 1
-
-    finally:
-        # A connection context manages transactions, not connection closure.
-        if connection is not None:
-            connection.close()
 
     print(json.dumps(
         {"database": str(database_path), **summary},
