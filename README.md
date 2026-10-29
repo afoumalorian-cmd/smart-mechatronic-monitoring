@@ -12,7 +12,7 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 3 - Local SQLite storage of validated telemetry.
+Phase 4 - Raspberry Pi gateway: collection, validation and SQLite import verified.
 Motor control and DHT22 acquisition results from previous phases are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
@@ -243,7 +243,7 @@ Sensor accuracy has not been independently verified.
 - Arduino IDE 2.3.10: sketch compilation, upload and Serial Monitor verified
 - Git 2.54.0.windows.1: available
 - GitHub: https://github.com/afoumalorian-cmd/smart-mechatronic-monitoring
-- Current branch: feature/phase-3-local-storage
+- Phase 4 branch: feature/phase-4-raspberry-pi-gateway
 - Python 3.12.6 with a project-local .venv
 - pyserial 3.5
 
@@ -312,3 +312,58 @@ Sensor accuracy has not been independently verified.
 - [x] Verify repeated imports skip identical measurements.
 - [x] Query stored measurements and calculate summary statistics.
 - [x] Verify conflicting records roll back the entire import.
+
+
+## Phase 4 - Raspberry Pi Edge Gateway
+
+### Verified Environment
+
+- Raspberry Pi 4 Model B with a 32 GB microSD.
+- Raspberry Pi OS Full (64-bit), based on Debian 13 Trixie.
+- System upgrade, reboot and SSH reconnection verified.
+- SSH access tested from the VS Code terminal and PuTTY.
+- Python 3.13.5, SQLite 3.46.1 and pyserial 3.5.
+- Arduino connected through USB on /dev/ttyACM0 at 9600 baud.
+- Motor and BAT disconnected during acquisition.
+
+
+### Observed Results
+
+- Collection stopped cleanly with Ctrl+C after saving 55 records.
+- Two non-JSON lines were skipped at startup; their origin is unknown.
+- Validation: 55 valid records, 0 sensor errors and 0 invalid records.
+- SQLite import: 55 records read, 55 inserted and 0 duplicates.
+- Read-only queries confirmed 55 measurements and one import run.
+- Existing scripts ran on the Pi without source-code changes.
+
+Collection, validation and import remain separate manual operations.
+Graphical desktop access has not yet been verified.
+
+
+### Linux Setup and Collection
+
+Run from the project root:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m serial.tools.list_ports -v
+./.venv/bin/python collector/serial_collector.py --port /dev/ttyACM0 --baud 9600
+```
+
+Press Ctrl+C to stop collection. The serial port path may change;
+identify it before starting a new session.
+
+
+### Linux Validation and SQLite Import
+
+Commands used for the verified Raspberry Pi session:
+
+```bash
+./.venv/bin/python processing/validate_telemetry.py --input data/raw/telemetry_20261029T203118_b1f4f900c42e49f29a57d457ff7856b4.jsonl
+./.venv/bin/python processing/import_sqlite.py --input data/validated/20261029T203752_9478d0853fdf4cbf868f8c9ce488a351/valid.jsonl
+```
+
+For subsequent sessions, replace these paths with the new RAW file
+and its corresponding validated file. Source files remain unchanged.
+The local database is data/local/telemetry.sqlite3.
