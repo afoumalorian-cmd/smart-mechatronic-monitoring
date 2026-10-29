@@ -141,8 +141,34 @@ The first three persisted records were inspected and contained
 UTC reception timestamps, a common session ID and sensor readings.
 
 The collector skips malformed JSON and retains sensor error events.
-Telemetry field validation and reconnection are not implemented yet.
+Telemetry field validation is performed separately after collection.
+Automatic serial reconnection is not implemented yet.
 Local environments and collected data are excluded from Git.
+
+### Telemetry Validation
+
+Run validation on the latest modified RAW telemetry file:
+
+```powershell
+.\.venv\Scripts\python.exe .\processing\validate_telemetry.py
+```
+
+The validator checks record structure, UTC reception timestamps,
+required telemetry fields, status and measurement ranges.
+
+Each run creates a directory under data/validated/ containing:
+
+- valid.jsonl: valid measurements.
+- sensor_errors.jsonl: correctly structured sensor error events.
+- invalid.jsonl: rejected records with source lines and reasons.
+- summary.json: validation counts and source file information.
+
+RAW files remain unchanged.
+
+Validation of the recorded session classified all 177 records as
+valid, with no sensor error events or invalid records.
+A synthetic humidity value of 120% was correctly rejected.
+Sensor accuracy has not been independently verified.
 
 ## Development Environment
 
@@ -214,4 +240,4 @@ Local environments and collected data are excluded from Git.
 - [x] Acquire DHT22 temperature and humidity as serial JSON.
 - [x] Collect telemetry with Python and add UTC reception timestamps.
 - [x] Persist a collection session containing 177 JSONL records.
-- [ ] Validate telemetry fields and measurement ranges.
+- [x] Validate telemetry fields and measurement ranges.
