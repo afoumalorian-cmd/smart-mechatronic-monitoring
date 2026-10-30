@@ -8,40 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from validate_telemetry import reject_constant, validate_record
-
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS import_runs (
-    import_id TEXT PRIMARY KEY,
-    imported_at_utc TEXT NOT NULL,
-    source_file TEXT NOT NULL,
-    records_read INTEGER NOT NULL CHECK (records_read >= 0),
-    records_inserted INTEGER NOT NULL CHECK (records_inserted >= 0),
-    duplicates_skipped INTEGER NOT NULL CHECK (duplicates_skipped >= 0),
-    CHECK (records_read = records_inserted + duplicates_skipped)
-);
-
-CREATE TABLE IF NOT EXISTS measurements (
-    measurement_id INTEGER PRIMARY KEY,
-    import_id TEXT NOT NULL REFERENCES import_runs(import_id),
-    source_line INTEGER NOT NULL CHECK (source_line > 0),
-    session_id TEXT NOT NULL,
-    received_at_utc TEXT NOT NULL,
-    device_id TEXT NOT NULL,
-    sequence INTEGER NOT NULL CHECK (sequence >= 0),
-    uptime_ms INTEGER NOT NULL CHECK (uptime_ms >= 0),
-    sensor TEXT NOT NULL CHECK (sensor = 'dht22'),
-    status TEXT NOT NULL CHECK (status = 'ok'),
-    temperature_c REAL NOT NULL
-        CHECK (temperature_c BETWEEN -40 AND 80),
-    humidity_pct REAL NOT NULL
-        CHECK (humidity_pct BETWEEN 0 AND 100),
-    UNIQUE (session_id, device_id, sequence)
-);
-
-CREATE INDEX IF NOT EXISTS idx_measurements_device_time
-ON measurements (device_id, received_at_utc);
-"""
+from measurement_record import measurement_parts
+from sqlite_schema import initialize_database
 
 
 def import_records(connection, input_path):
@@ -92,27 +60,7 @@ def import_records(connection, input_path):
                         f"{details}"
                     )
 
-                telemetry = record["telemetry"]
-
-                key = (
-                    record["session_id"],
-                    telemetry["device_id"],
-                    telemetry["sequence"],
-                )
-
-                # Normalize the timestamp to one consistent UTC format.
-                timestamp = datetime.fromisoformat(
-                    record["received_at_utc"]
-                ).astimezone(timezone.utc).isoformat()
-
-                values = (
-                    timestamp,
-                    telemetry["uptime_ms"],
-                    telemetry["sensor"],
-                    telemetry["status"],
-                    telemetry["temperature_c"],
-                    telemetry["humidity_pct"],
-                )
+                key, values = measurement_parts(record)
 
                 existing = connection.execute(
                     """
@@ -195,8 +143,7 @@ def import_file(input_path, database_path):
     try:
         database_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(database_path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.executescript(SCHEMA)
+        initialize_database(connection)
 
         return import_records(connection, input_path)
 
