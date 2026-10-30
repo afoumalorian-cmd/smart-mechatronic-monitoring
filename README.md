@@ -12,7 +12,17 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 4 - Raspberry Pi gateway: collection, validation and SQLite import verified.
+Phase 5 - Local pipeline: validation and SQLite import orchestrated
+through one command, with persistent execution journals and explicit recovery.
+
+Successful pipeline execution verified on Windows and Raspberry Pi.
+Failure recovery, fingerprint mismatch rejection and mixed-record
+handling verified on Windows.
+
+Collection remains a separate manual operation. Process only completed
+RAW files after stopping collection. MQTT, automatic startup and serial
+reconnection are not implemented.
+
 Motor control and DHT22 acquisition results from previous phases are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
@@ -367,3 +377,121 @@ Commands used for the verified Raspberry Pi session:
 For subsequent sessions, replace these paths with the new RAW file
 and its corresponding validated file. Source files remain unchanged.
 The local database is data/local/telemetry.sqlite3.
+
+## Phase 5 - Local Pipeline and Explicit Recovery
+
+### Processing Flow
+
+Stop collection before running the pipeline on a completed RAW file.
+
+processing/run_pipeline.py orchestrates validation and SQLite import.
+It reuses validate_file() and import_file() from the existing modules.
+Collection remains a separate operation.
+
+Only valid measurements are imported. Sensor errors and invalid
+records remain in their separate validation outputs.
+When no valid measurements exist, SQLite import is skipped.
+
+### Execution Journals
+
+Each attempt creates a JSON journal under data/pipeline/ containing:
+
+- Execution ID, source path, database path and UTC timestamps.
+- RAW SHA-256 fingerprint.
+- Validation directory and classification counts when available.
+- Import summary on success, or error details on failure.
+- Previous execution reference when using --resume.
+
+States include started, validated, completed,
+completed_with_rejections, failed and interrupted.
+
+Journal updates use a temporary file followed by atomic replacement.
+Full durability through power loss has not been verified.
+
+### Explicit Recovery
+
+Use --input to process a RAW file or --resume to retry an unfinished
+or failed execution from its journal. These options are mutually exclusive.
+Use --database to override the target database, including during recovery.
+
+Recovery verifies the RAW fingerprint and starts a new attempt.
+It repeats validation and import rather than continuing at a saved line.
+The previous journal remains unchanged.
+Identical measurements are skipped by the SQLite importer.
+
+Journals without a source fingerprint cannot be resumed.
+Completed executions cannot be resumed through --resume.
+A fresh --input execution remains possible.
+
+### Observed Results
+
+Windows:
+
+- Existing RAW: 177 valid measurements imported.
+- Repeated execution: 0 inserted, 177 duplicates skipped.
+- Invalid database target: failure recorded with validation results.
+- Recovery with corrected database: completed, 177 duplicates skipped.
+- Synthetic journal fingerprint mismatch: rejected before validation.
+- Mixed input: 1 valid, 1 sensor error, 1 invalid; 1 inserted;
+  journal status completed_with_rejections.
+- Input without valid measurements: import skipped.
+
+Raspberry Pi:
+
+- Existing RAW: 55 valid, 0 sensor errors, 0 invalid.
+- Dedicated test database: 55 inserted, 0 duplicates.
+- Journal inspected: completed, fingerprint and import summary present.
+- Recovery scenarios have not been separately tested on the Pi.
+
+### Current Limits
+
+- No automatic discovery or skipping of previously processed RAW files.
+- No automatic collection-to-processing trigger.
+- No automatic startup, serial reconnection or MQTT transport.
+- No automatic handling of Arduino sequence resets within a session.
+- Ctrl+C handling exists; interruption and power-loss recovery have
+  not been experimentally verified in Phase 5.
+- Fingerprint checks do not lock the RAW file; collection must be stopped.
+- Journals contain local absolute paths and are not portable between
+  Windows and Raspberry Pi without adaptation.
+- Data, databases and execution journals remain excluded from Git.
+
+### Command Examples
+
+Run from the project root, after stopping collection.
+These examples use existing local files and dedicated test databases.
+
+Windows / PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe processing/run_pipeline.py --input data/raw/telemetry_20261029T142908_41ea517fb95941d8a66366e44b4c5942.jsonl --database data/local/phase5_pipeline_test.sqlite3
+```
+
+Recovery example verified on Windows, using the failed execution journal
+and a corrected database target:
+
+```powershell
+.\.venv\Scripts\python.exe processing/run_pipeline.py --resume data/pipeline/1b4b256ce84949c6b34e0e524cb829fd.json --database data/local/phase5_pipeline_test.sqlite3
+```
+
+Raspberry Pi / Linux:
+
+```bash
+./.venv/bin/python processing/run_pipeline.py --input data/raw/telemetry_20261029T203118_b1f4f900c42e49f29a57d457ff7856b4.jsonl --database data/local/phase5_pipeline_test.sqlite3
+```
+
+Replace RAW and journal paths with those from the intended execution.
+Without --database, the target defaults to data/local/telemetry.sqlite3
+for --input, or to the previous journal's database for --resume.
+
+### Exit Codes
+
+- 0: processing completed with no invalid records; sensor errors alone
+  do not cause a nonzero exit code.
+- 1: processing completed with invalid records, or a processing
+  failure occurred; inspect the journal to distinguish these outcomes.
+- 2: command-line argument or preflight validation error.
+- 130: KeyboardInterrupt handled during the processing block.
+
+Exit-code behavior is defined in the code; numerical exit codes were
+not separately checked during the recorded Phase 5 tests.
