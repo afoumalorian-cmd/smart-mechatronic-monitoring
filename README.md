@@ -12,16 +12,17 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 5 - Local pipeline: validation and SQLite import orchestrated
-through one command, with persistent execution journals and explicit recovery.
+Phase 6 - Local MQTT transport: an existing validated telemetry file
+was published through Mosquitto on Raspberry Pi and saved by a Python
+consumer.
 
-Successful pipeline execution verified on Windows and Raspberry Pi.
-Failure recovery, fingerprint mismatch rejection and mixed-record
-handling verified on Windows.
+The 55-record test confirmed matching source and received JSON content
+and order, with no duplicate measurement keys in that execution.
+Consumer disconnection detection was verified by stopping the broker.
 
-Collection remains a separate manual operation. Process only completed
-RAW files after stopping collection. MQTT, automatic startup and serial
-reconnection are not implemented.
+The Phase 5 validation and SQLite pipeline remains available separately.
+Collection and MQTT publication remain manual, separate operations.
+Automatic startup and serial reconnection are not implemented.
 
 Motor control and DHT22 acquisition results from previous phases are preserved.
 
@@ -447,7 +448,9 @@ Raspberry Pi:
 
 - No automatic discovery or skipping of previously processed RAW files.
 - No automatic collection-to-processing trigger.
-- No automatic startup, serial reconnection or MQTT transport.
+- No automatic startup or serial reconnection.
+- MQTT transport is implemented separately in Phase 6; it is not
+  integrated into the local pipeline.
 - No automatic handling of Arduino sequence resets within a session.
 - Ctrl+C handling exists; interruption and power-loss recovery have
   not been experimentally verified in Phase 5.
@@ -495,3 +498,136 @@ for --input, or to the previous journal's database for --resume.
 
 Exit-code behavior is defined in the code; numerical exit codes were
 not separately checked during the recorded Phase 5 tests.
+
+
+## Phase 6 - Local MQTT Transport
+
+### Scope and Components
+
+The existing acquisition and SQLite pipeline remains unchanged.
+
+Transport tested on Raspberry Pi:
+
+Validated JSONL file -> Python producer -> Mosquitto broker ->
+Python consumer -> received JSONL file.
+
+- Broker: Mosquitto 2.0.21.
+- Command-line tools: mosquitto-clients.
+- Python dependency: paho-mqtt==2.1.0 on Windows and Raspberry Pi.
+- Producer: transport/mqtt_producer.py.
+- Consumer: transport/mqtt_consumer.py.
+- Topic: smart-mechatronic/machine_001/telemetry.
+- MQTT protocol: 3.1.1.
+- Publication and subscription QoS: 1.
+- Retained publication: disabled.
+
+The broker was observed listening only on 127.0.0.1:1883 and
+[::1]:1883. Direct MQTT access from the PC was not configured or tested.
+
+### Producer Behavior
+
+The producer reads and validates the entire input file before publishing.
+It reuses the existing telemetry validation rules and accepts only valid
+measurements for machine_001.
+
+Each source record becomes one MQTT message. Record values, including
+session_id and received_at_utc, are preserved.
+
+Messages are published sequentially. The producer waits for each
+broker PUBACK before submitting the next message.
+
+Counters distinguish total records, submitted publications and
+broker-confirmed publications.
+
+The producer stops on an error or disconnection. The network-loop wait
+for connection acknowledgement or each PUBACK is limited to 10 seconds.
+Automatic reconnection and publication recovery are not implemented.
+
+### Consumer Behavior
+
+The consumer subscribes before publication begins and reuses the existing
+validation rules. It accepts only valid machine_001 records delivered
+on the expected topic at QoS 1.
+
+Each execution creates a new file:
+
+data/mqtt/<execution>/received.jsonl
+
+For each accepted message, the consumer writes the JSON record,
+flushes the file and calls fsync before requesting its MQTT
+acknowledgement.
+
+Counters distinguish received messages from saved records.
+The consumer stops on a rejected message, processing error or
+disconnection. It does not reconnect automatically or remove duplicates.
+
+The --limit option stops reception after the requested number of saved
+records. Without it, the consumer waits until interruption or failure.
+
+### Observed Results
+
+- Command-line help and imports checked on Windows for both modules.
+- Single-record test on Raspberry Pi: one received and saved record;
+  persisted JSON content matched the first source record.
+- Full-file producer test: 55 total, 55 submitted, 55 broker-confirmed;
+  no reported error.
+- Full-file consumer test: 55 received, 55 saved; no reported error.
+- File comparison: 55 records, matching JSON content and order,
+  with no duplicate (session_id, device_id, sequence) keys.
+- Broker stopped while the consumer was idle: consumer exited with
+  "MQTT network loop failed: 7", with 0 received and 0 saved.
+- Broker restarted successfully; service active and loopback-only
+  listening confirmed again.
+
+The full-file reception output was:
+
+data/mqtt/20261030T203815_ebed22715b4b48bab28ae566e026c8a8/received.jsonl
+
+### Acknowledgements and Limits
+
+A producer PUBACK confirms broker acceptance of that publication.
+It does not confirm consumer reception or application file storage.
+
+The consumer requests its own delivery acknowledgement after file
+synchronization. This is not an application storage confirmation
+returned to the producer.
+
+QoS 1 permits duplicate delivery. A failure after writing but before
+acknowledgement can produce duplicates. Replaying a source file can
+also produce duplicates.
+
+Both clients use clean sessions and new client IDs on each execution.
+Offline subscriber delivery and recovery across restarts are not
+provided by these scripts. An unacknowledged message is not guaranteed
+to be recovered after the consumer exits.
+
+The disconnection test covered an idle consumer only. Interruption
+during publication, producer timeout behavior, write failures, Ctrl+C
+and power-loss durability were not experimentally verified in Phase 6.
+
+The producer loads the complete file into memory; large-file behavior
+has not been evaluated.
+
+No serial-collector integration, SQLite consumer import, remote MQTT
+access, PostgreSQL, dashboard or alerting was added in this phase.
+Local transport data remains excluded from Git through data/.
+
+### Verified Raspberry Pi Commands
+
+Run from the project root in two SSH terminals.
+
+Start the consumer first and wait for "Ready: subscribed...":
+
+```bash
+./.venv/bin/python -m transport.mqtt_consumer --limit 55
+```
+
+Then publish the existing validated file from the second terminal:
+
+```bash
+./.venv/bin/python -m transport.mqtt_producer \
+  --input data/validated/20261030T001827_479746098dbb49d9b301e2b493c0851f/valid.jsonl
+```
+
+For another file, adapt the input path and consumer limit.
+These scripts connect to the broker on the machine where they run.
