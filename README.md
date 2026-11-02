@@ -12,18 +12,18 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 6 - Local MQTT transport: an existing validated telemetry file
-was published through Mosquitto on Raspberry Pi and saved by a Python
-consumer.
+Phase 7 - Local MQTT reception and SQLite storage: validated telemetry
+was published through Mosquitto on Raspberry Pi and persisted in SQLite.
 
-The 55-record test confirmed matching source and received JSON content
-and order, with no duplicate measurement keys in that execution.
-Consumer disconnection detection was verified by stopping the broker.
+Tests confirmed 55 initial insertions, followed by 55 identical
+duplicates without additional measurements. A conflicting publication
+was traced and rejected while preserving the original measurement.
+The corrected consumer shut down without a reported error during
+the duplicate replay test.
 
-The Phase 5 validation and SQLite pipeline remains available separately.
+The Phase 5 file pipeline and Phase 6 JSONL consumer remain available.
 Collection and MQTT publication remain manual, separate operations.
 Automatic startup and serial reconnection are not implemented.
-
 Motor control and DHT22 acquisition results from previous phases are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
@@ -204,8 +204,10 @@ Local databases remain excluded from Git through the data/ rule.
 - import_runs stores successful import execution IDs, UTC import
   timestamps, source file paths and record counts.
 - measurements stores collection metadata and DHT22 measurements.
-- Each measurement references the import that first inserted it
-  and retains its line number in the validated source file.
+- File-origin measurements reference the import that first inserted
+  them and retain their validated source line number.
+- MQTT-origin measurements have no file import or source line;
+  their reception history is recorded in mqtt_receipts.
 - The unique key is (session_id, device_id, sequence).
 - An index on (device_id, received_at_utc) supports device/time queries.
 
@@ -631,3 +633,158 @@ Then publish the existing validated file from the second terminal:
 
 For another file, adapt the input path and consumer limit.
 These scripts connect to the broker on the machine where they run.
+
+## Phase 7 - Local MQTT Reception and SQLite Storage
+
+### Scope and Components
+
+Verified flow on Raspberry Pi:
+
+Validated JSONL file -> Python producer -> local Mosquitto broker ->
+Python SQLite consumer -> measurements and mqtt_receipts.
+
+- Consumer: transport/mqtt_sqlite_consumer.py.
+- Message storage: transport/mqtt_storage.py.
+- Shared measurement preparation: processing/measurement_record.py.
+- Shared schema and initialization: processing/sqlite_schema.py.
+- Topic: smart-mechatronic/machine_001/telemetry.
+- MQTT 3.1.1, QoS 1, clean sessions and random client IDs.
+- Broker access remains restricted to loopback.
+- Dedicated test database: data/local/phase7_mqtt_test.sqlite3.
+
+The Phase 6 JSONL consumer remains a separate tool.
+The SQLite consumer does not also write received.jsonl.
+
+### Storage and Duplicate Rules
+
+The consumer reuses validate_record() and accepts valid measurements
+for machine_001 on the expected topic at QoS 1.
+
+The unique measurement key remains
+(session_id, device_id, sequence).
+
+Duplicate comparison includes the collection timestamp normalized to
+UTC, uptime_ms, sensor, status, temperature_c and humidity_pct.
+It compares these stored fields, not the raw JSON byte representation.
+
+Each message is processed in its own transaction:
+
+| Outcome | SQLite behavior | Consumer behavior |
+|---|---|---|
+| New valid measurement | Insert measurement and receipt together | Request ACK after commit |
+| Identical duplicate | Add receipt; retain existing measurement | Request ACK after commit |
+| Conflicting content | Add conflict receipt; preserve existing measurement | Stop without requesting ACK |
+| Sensor error or invalid message | Add receipt with details; no measurement | Stop without requesting ACK |
+| SQLite failure | Roll back the current transaction | Stop without requesting ACK |
+
+Earlier committed messages are not rolled back by a later conflict.
+
+The --limit option counts successful insertions and identical duplicates.
+Zero means no message-count limit.
+
+### Reception Traceability
+
+mqtt_receipts stores a unique receipt ID, consumer execution ID,
+UTC reception-processing timestamp, topic, QoS, MQTT packet ID,
+DUP and retain flags, original payload bytes, outcome, diagnostic
+details and an optional reference to the measurement.
+
+The collection timestamp received_at_utc remains unchanged in meaning.
+It is distinct from mqtt_received_at_utc.
+
+MQTT packet IDs and DUP flags are diagnostic metadata, not the
+measurement deduplication key. Republishing an identical measurement
+can be classified as a duplicate even when its MQTT DUP flag is false.
+
+### Schema Migration and File Import Compatibility
+
+initialize_database() creates new databases or transactionally rebuilds
+the original measurements table to permit MQTT provenance.
+
+Existing measurement IDs and values are preserved.
+File-origin measurements still require both an import ID and a positive
+source line. MQTT-origin measurements leave both fields null.
+
+Foreign keys are checked before initialization commits and enabled
+after initialization.
+
+The file importer retains one transaction per file:
+identical measurements are skipped, and conflicting content rolls back
+the entire attempted import.
+
+### Observed Results
+
+Windows checks:
+
+- Shared measurement preparation and schema creation passed.
+- In-memory migration preserved an existing measurement and import run.
+- Repeated schema initialization succeeded.
+- File import: insertion, identical duplicate and full conflict rollback passed.
+- Message storage: insertion, duplicate and conflict handling passed.
+- A forced receipt insertion failure rolled back the associated new measurement.
+- Consumer command-line help loaded successfully.
+
+Raspberry Pi MQTT tests:
+
+- Initial publication: 55 broker-confirmed publications.
+- Initial reception: 55 inserted measurements and 55 insertion receipts.
+- Initial shutdown reported "MQTT shutdown loop failed: 7";
+  subsequent read-only checks confirmed the 55 persisted measurements.
+- After the shutdown correction, replay produced 0 insertions,
+  55 duplicates, 55 ACK requests and no reported consumer error.
+- Read-only queries confirmed 55 measurements and 110 receipts.
+- Conflict test changed the first temperature from 21.1 to 22.1
+  while retaining the same measurement key.
+- Consumer recorded one conflict, requested no ACK and stopped explicitly.
+- Final queries confirmed 55 measurements, the original 21.1 value,
+  and 111 receipts: 55 inserted, 55 duplicate and 1 conflict.
+- SQLite integrity checks returned ok with no foreign key violations.
+
+### Acknowledgements and Limits
+
+The consumer requests MQTT acknowledgement only after an insertion
+or duplicate transaction commits. A successful ACK request does not
+prove that the broker received it.
+
+The producer's PUBACK confirms broker acceptance, not SQLite storage.
+The conflict test still produced a successful producer PUBACK.
+
+Clean sessions and random client IDs do not provide offline recovery
+across consumer executions. Stopping without ACK does not guarantee
+future redelivery.
+
+The consumer requests SQLite synchronous=FULL.
+Power-loss durability has not been experimentally verified.
+
+The corrected shutdown waits for local clean-disconnection notification,
+with a five-second deadline. This is not a broker storage confirmation.
+
+Sensor-error and invalid-message handling is implemented but was not
+separately exercised through the broker in these Phase 7 tests.
+Broker interruption, Ctrl+C, concurrent writers and actual disk failures
+were not tested with the Phase 7 consumer.
+
+No serial-collector integration, automatic reconnection, remote MQTT,
+PostgreSQL, dashboard or automation is included.
+PC and Pi databases remain separate. Local data remains excluded from Git.
+
+### Verified Raspberry Pi Commands
+
+Run from the project root in two SSH terminals.
+Start the consumer first and wait for "Ready: subscribed...":
+
+```bash
+./.venv/bin/python -m transport.mqtt_sqlite_consumer \
+  --database data/local/phase7_mqtt_test.sqlite3 \
+  --limit 55
+```
+
+Then publish from the second terminal:
+
+```bash
+./.venv/bin/python -m transport.mqtt_producer \
+  --input data/validated/20261030T001827_479746098dbb49d9b301e2b493c0851f/valid.jsonl
+```
+
+Reusing the populated test database and the same source file should
+produce identical duplicates instead of new measurements.
