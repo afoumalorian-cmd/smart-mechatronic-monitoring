@@ -5,6 +5,7 @@ import json
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
+import time
 
 import paho.mqtt.client as mqtt
 
@@ -24,7 +25,11 @@ def consume(database_path, limit):
         "invalid": 0,
         "ack_requested": 0,
     }
-    state = {"error": None, "done": False}
+    state = {
+        "error": None,
+        "done": False,
+        "disconnected_cleanly": False,
+    }
     connection = None
     client = None
 
@@ -50,8 +55,12 @@ def consume(database_path, limit):
         print(f"Ready: subscribed to {TOPIC} at QoS 1", flush=True)
 
     def on_disconnect(client, userdata, flags, reason_code, properties):
+        state["disconnected_cleanly"] = not reason_code.is_failure
+
         if not state["done"]:
             fail(f"Broker disconnected: {reason_code}")
+        elif reason_code.is_failure:
+            fail(f"MQTT shutdown failed: {reason_code}")
 
     def on_message(client, userdata, message):
         # A network loop iteration may dispatch multiple queued messages.
@@ -126,13 +135,29 @@ def consume(database_path, limit):
         # This does not prove that the broker received the ACKs.
         try:
             if client is not None:
-                client.disconnect()
-                result = client.loop(timeout=0.1)
-                if result not in (
-                    mqtt.MQTT_ERR_SUCCESS,
-                    mqtt.MQTT_ERR_NO_CONN,
-                ):
-                    fail(f"MQTT shutdown loop failed: {result}")
+                result = client.disconnect()
+
+                if result == mqtt.MQTT_ERR_SUCCESS:
+                    deadline = time.monotonic() + 5.0
+
+                    while not state["disconnected_cleanly"]:
+                        if time.monotonic() >= deadline:
+                            fail("Timed out waiting for MQTT shutdown.")
+                            break
+
+                        result = client.loop(timeout=0.1)
+
+                        # A clean disconnect callback may close the socket
+                        # during this loop iteration.
+                        if state["disconnected_cleanly"]:
+                            break
+
+                        if result != mqtt.MQTT_ERR_SUCCESS:
+                            fail(f"MQTT shutdown loop failed: {result}")
+                            break
+
+                elif result != mqtt.MQTT_ERR_NO_CONN:
+                    fail(f"MQTT disconnect request failed: {result}")
         except Exception as exc:
             fail(f"MQTT shutdown failed: {exc}")
         finally:
