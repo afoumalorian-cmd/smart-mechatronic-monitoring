@@ -901,3 +901,23 @@ Synthetic checks passed for:
 
 This module does not publish messages or persist publication progress.
 These checks used no Arduino or MQTT broker.
+
+### RAW Source Reader Checks Observed on Windows
+
+transport/raw_source.py reads complete lines from a seekable binary file.
+The maximum line size is 64 KiB, including the newline.
+
+Synthetic checks passed for:
+
+- LF and CRLF lines, and clean end of file.
+- An incomplete live line left unread, then read after its suffix
+  was appended to a temporary file.
+- An incomplete trailing line rejected in completed-file mode.
+- A complete line exactly at the size limit accepted.
+- Oversized lines rejected in both modes without advancing the reader.
+
+Reading a complete line does not prove that the collector has
+synchronized its bytes to storage.
+
+Publication, persistent progress tracking and source-change detection
+are not implemented by this reader.
