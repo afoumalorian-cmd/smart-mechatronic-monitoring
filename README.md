@@ -959,3 +959,29 @@ be using it. Its presence alone does not indicate an active lock.
 These checks exercised Windows byte-range locking.
 The Linux flock implementation remains unverified on Raspberry Pi.
 The lock does not itself persist publication progress.
+
+### Publication Journal Checks Observed on Windows
+
+transport/publication_journal.py creates, validates, saves and loads
+publication checkpoints.
+
+Each checkpoint contains the source path, device/inode identity,
+processed byte offset, processed line count, prefix SHA-256 and counters
+for broker-confirmed publications, sensor errors and invalid records.
+
+Tests using temporary files confirmed:
+
+- Initial and consistent nonempty checkpoints saved and reloaded.
+- Invalid fields and inconsistent counters or offsets rejected.
+- Saving a journal directly over its RAW source rejected.
+- Simulated atomic replacement failure preserved the previous journal
+  and removed the temporary file.
+- Malformed JSON, non-object journals and NaN rejected.
+- RAW content remained unchanged throughout the tests.
+
+Saving reuses the existing temporary-file, fsync and atomic-replacement
+helper. The caller must hold the publication lock.
+
+These checks do not verify power-loss durability.
+Source verification during recovery, checkpoint advancement and MQTT
+publication remain to be implemented.
