@@ -788,3 +788,70 @@ Then publish from the second terminal:
 
 Reusing the populated test database and the same source file should
 produce identical duplicates instead of new measurements.
+
+## Phase 8 - Arduino Collection and Local MQTT Integration
+
+### Planned Scope - Not Yet Implemented or Verified
+
+Target flow on Raspberry Pi:
+
+Arduino DHT22 -> serial collector -> local RAW JSONL ->
+record validation -> local MQTT broker -> existing SQLite consumer.
+
+Collection and publication will run as separate processes.
+MQTT connection failures and PUBACK waits must not block serial collection.
+
+### Local Retention and Publication Tracking
+
+- Preserve collected JSON records under data/raw/ before publication.
+- Define and implement RAW synchronization before making durability claims.
+- Publish only valid machine_001 measurements.
+- Retain sensor errors and validation rejections locally with their outcomes.
+- Track publication progress durably under data/.
+- Keep publication tracking separate from consumer mqtt_receipts.
+- Preserve original session IDs, reception timestamps and telemetry on replay.
+- Process complete RAW lines only while collection is active.
+- Report an incomplete trailing line when processing a completed file.
+- Detect source replacement or modification before trusting saved progress.
+- Allow only one publisher to update a given publication journal.
+
+### Acknowledgements and Recovery
+
+A producer PUBACK confirms broker acceptance, not SQLite storage.
+
+Normal publication recovery will retry pending or uncertain records.
+An explicit replay must also allow broker-confirmed records to be
+republished when their SQLite storage is uncertain.
+
+The existing consumer detects identical measurements using
+(session_id, device_id, sequence). Conflicting content remains an error.
+
+No application storage acknowledgement will be returned to the producer
+in this phase. SQLite persistence must be verified separately.
+
+### Interruptions and Session Identity
+
+- Broker or publisher failure must leave RAW collection independent.
+- Publisher restart must use saved progress and unchanged source records.
+- Serial disconnection will stop collection; reconnection remains manual.
+- A restarted collector will create a new session.
+- Counter discontinuities within an active collection require an explicit
+  session policy before implementation.
+- Arduino sequence resets must not silently reuse existing measurement keys.
+- Power-loss durability remains unverified until experimentally tested.
+
+### Planned Validation
+
+Run integration tests locally on Raspberry Pi using:
+
+data/local/phase8_mqtt_test.sqlite3
+
+Verify live acquisition, RAW retention, validation, broker PUBACKs and
+SQLite persistence separately.
+
+Exercise publisher interruption, broker unavailability, explicit replay,
+duplicate handling and Arduino counter discontinuities.
+
+Record observed results only after completing the corresponding tests.
+Automatic startup, remote MQTT access and automatic serial reconnection
+remain outside this phase.
