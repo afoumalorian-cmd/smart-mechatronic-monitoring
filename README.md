@@ -835,9 +835,12 @@ in this phase. SQLite persistence must be verified separately.
 - Publisher restart must use saved progress and unchanged source records.
 - Serial disconnection will stop collection; reconnection remains manual.
 - A restarted collector will create a new session.
-- Counter discontinuities within an active collection require an explicit
-  session policy before implementation.
-- Arduino sequence resets must not silently reuse existing measurement keys.
+- For each device, a repeated or decreasing structurally valid sequence
+  counter will stop collection after preserving the triggering record
+  in RAW and reporting the discontinuity.
+- The publisher must reject that discontinuity before publishing the
+  triggering record or advancing past it.
+- Counter discontinuities are detected, but their cause is not inferred.
 - Power-loss durability remains unverified until experimentally tested.
 
 ### Planned Validation
@@ -855,3 +858,25 @@ duplicate handling and Arduino counter discontinuities.
 Record observed results only after completing the corresponding tests.
 Automatic startup, remote MQTT access and automatic serial reconnection
 remain outside this phase.
+
+### Collector Checks Observed on Windows
+
+The collector now calls flush() and fsync() after each RAW record.
+
+Syntax compilation passed. Tests using a simulated serial port and
+temporary RAW files confirmed:
+
+- Increasing counters 0, 1, 2: three records saved; normal interruption.
+- Repeated counters 0, 1, 1, 2: stopped with exit code 1 after saving
+  the repeated counter; the following record was not read.
+- Decreasing counters 5, 6, 0, 1: stopped with exit code 1 after saving
+  counter 0; the following record was not read.
+- Each test file retained a single collection session ID.
+
+Counter tracking requires a non-empty string device_id and a
+non-negative integer sequence, excluding booleans. It does not require
+the remaining telemetry fields to pass measurement validation.
+
+These checks used no physical Arduino or MQTT broker.
+Power-loss durability and Raspberry Pi behavior remain unverified
+for these changes.
