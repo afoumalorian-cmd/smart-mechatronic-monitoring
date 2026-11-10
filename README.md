@@ -985,3 +985,30 @@ helper. The caller must hold the publication lock.
 These checks do not verify power-loss durability.
 Source verification during recovery, checkpoint advancement and MQTT
 publication remain to be implemented.
+
+### Publication Recovery Checks Observed on Windows
+
+transport/publication_recovery.py verifies source identity and the
+processed prefix fingerprint, then reconstructs sequence tracking
+without publishing previously processed records.
+
+Tests using temporary files confirmed:
+
+- A mixed prefix restored sequence tracking and the saved reader offset.
+- Appended records and an incomplete suffix remained unread.
+- Modified prefixes and truncated sources were rejected.
+- Offsets inside a line and inconsistent line counts were rejected.
+- Classification counters inconsistent with RAW records were rejected.
+- File replacement with identical content was rejected by identity checks.
+- A sequence discontinuity in the processed prefix was rejected.
+- Rejected recovery restored the original reader position.
+
+The caller must hold the publication journal lock and open the RAW
+source in unbuffered binary mode.
+
+Recovery checks do not lock RAW against concurrent modifications.
+Reclassification checks journal consistency; it does not prove previous
+broker PUBACKs or SQLite persistence.
+
+These tests used no MQTT broker. Raspberry Pi recovery behavior remains
+unverified.
