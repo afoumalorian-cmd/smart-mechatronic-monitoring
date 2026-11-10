@@ -939,3 +939,23 @@ Synthetic checks passed for:
 The function computes a fingerprint; the future publication journal
 must store and compare it before trusting saved progress.
 It does not identify file replacement or lock the source against changes.
+
+### Publication Lock Checks Observed on Windows
+
+transport/publication_lock.py provides a non-blocking OS lock beside
+a publication journal. All publishers sharing that journal must use it.
+
+Tests with separate Python processes confirmed:
+
+- Concurrent access to the same journal was blocked.
+- The lock was released after normal exit and after an exception.
+- Different journals could be locked independently.
+- Forced termination released the process lock.
+- The lock file remained present after release.
+
+The lock file must not be deleted or replaced while publishers may
+be using it. Its presence alone does not indicate an active lock.
+
+These checks exercised Windows byte-range locking.
+The Linux flock implementation remains unverified on Raspberry Pi.
+The lock does not itself persist publication progress.
