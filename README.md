@@ -921,3 +921,21 @@ synchronized its bytes to storage.
 
 Publication, persistent progress tracking and source-change detection
 are not implemented by this reader.
+
+### RAW Prefix Fingerprint Checks Observed on Windows
+
+prefix_sha256() computes SHA-256 over an exact byte prefix while
+preserving the reader position. Reads are bounded to 1 MiB per chunk.
+
+Synthetic checks passed for:
+
+- Correct fingerprint and unchanged reader position.
+- Appended bytes excluded from the recorded prefix.
+- Modified prefix producing a different fingerprint.
+- Truncation rejected with the reader position restored.
+- Empty prefix accepted and invalid lengths rejected.
+- Prefix spanning multiple read chunks.
+
+The function computes a fingerprint; the future publication journal
+must store and compare it before trusting saved progress.
+It does not identify file replacement or lock the source against changes.

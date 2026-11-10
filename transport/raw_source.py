@@ -1,4 +1,5 @@
 """Read complete RAW JSONL lines from a binary source file."""
+import hashlib
 
 
 MAX_RAW_LINE_BYTES = 64 * 1024
@@ -39,3 +40,36 @@ def read_raw_line(source, *, completed=False):
         return None
 
     return raw_line
+
+
+def prefix_sha256(source, byte_count):
+    """Hash an exact binary prefix without changing the reader position.
+
+    Appended bytes beyond byte_count are excluded.
+    A source shorter than the requested prefix raises ValueError.
+    """
+    if type(byte_count) is not int or byte_count < 0:
+        raise ValueError("Prefix length must be a non-negative integer.")
+
+    position = source.tell()
+    digest = hashlib.sha256()
+
+    try:
+        source.seek(0)
+        remaining = byte_count
+
+        while remaining:
+            chunk = source.read(min(remaining, 1024 * 1024))
+
+            if not chunk:
+                raise ValueError(
+                    "RAW source is shorter than the recorded prefix."
+                )
+
+            digest.update(chunk)
+            remaining -= len(chunk)
+
+        return digest.hexdigest()
+
+    finally:
+        source.seek(position)
