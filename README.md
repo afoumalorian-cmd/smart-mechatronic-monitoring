@@ -880,3 +880,24 @@ the remaining telemetry fields to pass measurement validation.
 These checks used no physical Arduino or MQTT broker.
 Power-loss durability and Raspberry Pi behavior remain unverified
 for these changes.
+
+### RAW Publication Validation Checks Observed on Windows
+
+transport/raw_validation.py classifies individual RAW records using
+the existing telemetry validator and checks counters by
+(session_id, device_id).
+
+Synthetic checks passed for:
+
+- Increasing counters with original record values preserved.
+- Repeated and decreasing counters rejected without changing the
+  previous counter.
+- Independent counters across collection sessions.
+- Sensor errors classified separately and included in counter tracking.
+- Invalid measurements with usable identities and counters included
+  in counter tracking.
+- Malformed JSON, non-object records, NaN and invalid UTF-8 rejected.
+- Boolean counters and unexpected devices rejected.
+
+This module does not publish messages or persist publication progress.
+These checks used no Arduino or MQTT broker.
