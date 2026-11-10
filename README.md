@@ -1012,3 +1012,34 @@ broker PUBACKs or SQLite persistence.
 
 These tests used no MQTT broker. Raspberry Pi recovery behavior remains
 unverified.
+
+### Publication Step Checks Observed on Windows
+
+transport/publication_step.py processes one complete RAW line and saves
+a new checkpoint after the publication callback returns successfully.
+
+The callback contract requires return only after broker PUBACK.
+These tests used a simulated callback, not a real MQTT broker.
+
+Temporary-file tests confirmed:
+
+- Mixed input published only the valid measurement and checkpointed
+  one sensor error and two invalid records.
+- Rejection reports preserved original bytes as Base64.
+- Reaching EOF did not republish checkpointed records.
+- Publication failure left the journal unchanged for retry.
+- Checkpoint failure after simulated publication caused replay.
+- Sequence discontinuity blocked publication and cursor advancement.
+- Rejection-report failure prevented checkpoint advancement.
+- An incomplete live line left the journal unchanged.
+- Input checkpoint objects were not modified.
+
+Rejection reports are stored beside the journal under
+<journal filename>.rejections/, using source line numbers as filenames.
+
+The implementation reconstructs and hashes the processed prefix for
+each step. Its cumulative processing cost grows quadratically with
+file length; large-volume operation has not been evaluated.
+
+Real PUBACK handling, command-line orchestration and Raspberry Pi
+integration remain to be implemented or verified.
