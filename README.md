@@ -12,19 +12,36 @@ primarily with existing hardware.
 
 ## Current Status
 
-Phase 7 - Local MQTT reception and SQLite storage: validated telemetry
-was published through Mosquitto on Raspberry Pi and persisted in SQLite.
+Phase 8 - Arduino collection and local MQTT publication: RAW telemetry
+collected on Raspberry Pi was validated, published through local
+Mosquitto and persisted by the existing SQLite consumer.
 
-Tests confirmed 55 initial insertions, followed by 55 identical
-duplicates without additional measurements. A conflicting publication
-was traced and rejected while preserving the original measurement.
-The corrected consumer shut down without a reported error during
-the duplicate replay test.
+A collection session saved 845 RAW records. Tests published selected
+records from this session, including recovery from saved checkpoints
+and explicit replay using a separate journal.
 
-The Phase 5 file pipeline and Phase 6 JSONL consumer remain available.
-Collection and MQTT publication remain manual, separate operations.
-Automatic startup and serial reconnection are not implemented.
-Motor control and DHT22 acquisition results from previous phases are preserved.
+Read-only SQLite checks confirmed 32 measurements across two collection
+sessions and 42 MQTT receipts: 32 insertions and 10 identical duplicates.
+Database integrity checks returned ok with no foreign key violations.
+
+A separate 29-record RAW session contained two valid measurements and
+27 sensor errors. Only the two valid measurements were published.
+All 27 local sensor-error reports matched their original RAW bytes.
+
+Tests also verified journal preservation when the broker was unavailable,
+recovery after broker restart, Ctrl+C during idle follow mode, and
+exclusion of concurrent publishers sharing one journal on Linux.
+Stopping the broker during idle follow mode caused an explicit failure;
+subsequent recovery completed without republishing processed records.
+
+Broker PUBACKs remain distinct from SQLite persistence.
+The tests do not establish recovery during an in-flight PUBACK,
+power-loss durability or publication of all 845 collected records.
+
+Collection, publication and consumption run as separate processes
+started manually. Automatic startup and serial reconnection are not
+implemented. The Phase 5 file pipeline and Phase 6 JSONL consumer
+remain available. Previous motor and DHT22 results are preserved.
 
 USB power and board detection verified: ON LED lit, Arduino UNO
 detected and selected on COM5.
@@ -791,7 +808,7 @@ produce identical duplicates instead of new measurements.
 
 ## Phase 8 - Arduino Collection and Local MQTT Integration
 
-### Planned Scope - Not Yet Implemented or Verified
+### Initial Scope and Design
 
 Target flow on Raspberry Pi:
 
@@ -1104,3 +1121,81 @@ tested in these checks.
 Broker and serial reconnection remain manual.
 Broker-confirmed counters do not confirm SQLite persistence.
 These tests used no real broker or Arduino.
+
+### Raspberry Pi Integration Results - 2026-11-11
+
+Tests ran from main at commit f92f7c9 using local Mosquitto and
+data/local/phase8_mqtt_test.sqlite3.
+
+Mosquitto was active and listening only on 127.0.0.1:1883 and [::1]:1883.
+Arduino was detected on /dev/ttyACM0 at 9600 baud.
+
+#### Collection and Publication
+
+- An initial session saved 29 records: two valid readings followed by
+  27 sensor errors. Loose sensor wiring was reported and reconnected.
+- A subsequent session saved 845 RAW records before a clean Ctrl+C stop.
+- The first ten records of that session produced ten broker PUBACKs
+  and ten SQLite insertions.
+- Restarting with the same journal resumed after ten processed lines
+  and produced ten additional insertions.
+- Explicit replay with a new journal produced ten identical duplicates
+  and no additional measurements.
+
+These limited runs processed an existing prefix while using --follow.
+They do not separately demonstrate waiting for newly appended readings
+and delivering them immediately.
+
+#### Sensor Error Retention
+
+The completed 29-record session produced two broker-confirmed
+publications and 27 local sensor-error reports. The consumer inserted
+only the two valid measurements.
+
+Read-only checks confirmed that all 27 reports matched the original
+RAW bytes for lines 3 through 29. The journal covered all 29 lines.
+
+#### Failure and Recovery
+
+- With Mosquitto stopped, publication failed with connection refused.
+  The journal remained at 20 processed lines and byte offset 5287.
+- After broker restart and consumer subscription, the same journal
+  resumed and produced ten new insertions, reaching 30 processed lines.
+- Ctrl+C during idle follow mode was handled without processing more
+  records. Restart recovered the checkpoint without republication.
+- A second publisher using the same journal was rejected by the Linux
+  publication lock while the first publisher was waiting.
+- Stopping Mosquitto during idle follow mode caused
+  "MQTT network loop failed: 7". After broker restart, recovery completed
+  with no additional records and no reported error.
+
+#### Verified SQLite State
+
+Final read-only checks confirmed:
+
+| Item | Result |
+|---|---:|
+| Measurements | 32 |
+| Insertion receipts | 32 |
+| Duplicate receipts | 10 |
+| Total MQTT receipts | 42 |
+
+The first collection session contributed sequences 0 and 1.
+The subsequent session contributed sequences 0 through 29.
+
+PRAGMA integrity_check returned ok.
+PRAGMA foreign_key_check returned no violations.
+
+#### Remaining Limits
+
+- Only selected records were published from the 845-record session.
+- Broker PUBACK remains distinct from SQLite persistence.
+- Broker interruption during an in-flight publication or PUBACK wait
+  was not tested with the real broker.
+- Arduino counter discontinuities were tested synthetically on Windows,
+  not through a physical Arduino restart during active collection.
+- Power-loss recovery, forced termination during publication and actual
+  disk failures were not tested on Raspberry Pi.
+- Large-file performance remains unevaluated; repeated prefix scanning
+  has quadratic cumulative cost.
+- Startup, broker reconnection and serial reconnection remain manual.
