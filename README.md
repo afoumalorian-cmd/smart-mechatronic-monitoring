@@ -1066,3 +1066,41 @@ PUBACK confirms broker acceptance, not SQLite persistence.
 
 These checks used no real broker. Raspberry Pi MQTT behavior remains
 to be verified.
+
+### RAW Publication Command Checks Observed on Windows
+
+Command: python -m transport.publish_raw
+
+Required options:
+
+- --input: RAW JSONL source.
+- --journal: local publication checkpoint path.
+
+Optional behavior:
+
+- An existing journal resumes after its verified processed prefix.
+- A new journal starts at the beginning.
+- --follow waits for complete lines appended to an active RAW file.
+- --replay explicitly requires a new journal and preserves previous journals.
+- --limit counts lines processed during this execution, including rejections.
+
+Command-line help loaded successfully.
+Tests using temporary files and a simulated publisher confirmed:
+
+- Line limits, mixed classification and journal recovery.
+- Completed records were not republished during normal recovery.
+- Replay required a fresh journal.
+- Publication failure resumed from the last saved checkpoint.
+- Follow mode waited for an incomplete line to be completed.
+- Completed-file mode rejected incomplete trailing input.
+- Interruption returned 130, preserved recovery and released the lock.
+- A journal belonging to another RAW path was rejected before MQTT.
+
+Exit codes are 0 for successful processing, including classified
+rejections; 1 for runtime failure; 2 for argument errors; and 130 for
+handled interruption. Argument-error exit codes were not separately
+tested in these checks.
+
+Broker and serial reconnection remain manual.
+Broker-confirmed counters do not confirm SQLite persistence.
+These tests used no real broker or Arduino.
