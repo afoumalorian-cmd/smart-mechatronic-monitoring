@@ -788,3 +788,319 @@ Then publish from the second terminal:
 
 Reusing the populated test database and the same source file should
 produce identical duplicates instead of new measurements.
+
+## Phase 8 - Arduino Collection and Local MQTT Integration
+
+### Planned Scope - Not Yet Implemented or Verified
+
+Target flow on Raspberry Pi:
+
+Arduino DHT22 -> serial collector -> local RAW JSONL ->
+record validation -> local MQTT broker -> existing SQLite consumer.
+
+Collection and publication will run as separate processes.
+MQTT connection failures and PUBACK waits must not block serial collection.
+
+### Local Retention and Publication Tracking
+
+- Preserve collected JSON records under data/raw/ before publication.
+- Define and implement RAW synchronization before making durability claims.
+- Publish only valid machine_001 measurements.
+- Retain sensor errors and validation rejections locally with their outcomes.
+- Track publication progress durably under data/.
+- Keep publication tracking separate from consumer mqtt_receipts.
+- Preserve original session IDs, reception timestamps and telemetry on replay.
+- Process complete RAW lines only while collection is active.
+- Report an incomplete trailing line when processing a completed file.
+- Detect source replacement or modification before trusting saved progress.
+- Allow only one publisher to update a given publication journal.
+
+### Acknowledgements and Recovery
+
+A producer PUBACK confirms broker acceptance, not SQLite storage.
+
+Normal publication recovery will retry pending or uncertain records.
+An explicit replay must also allow broker-confirmed records to be
+republished when their SQLite storage is uncertain.
+
+The existing consumer detects identical measurements using
+(session_id, device_id, sequence). Conflicting content remains an error.
+
+No application storage acknowledgement will be returned to the producer
+in this phase. SQLite persistence must be verified separately.
+
+### Interruptions and Session Identity
+
+- Broker or publisher failure must leave RAW collection independent.
+- Publisher restart must use saved progress and unchanged source records.
+- Serial disconnection will stop collection; reconnection remains manual.
+- A restarted collector will create a new session.
+- For each device, a repeated or decreasing structurally valid sequence
+  counter will stop collection after preserving the triggering record
+  in RAW and reporting the discontinuity.
+- The publisher must reject that discontinuity before publishing the
+  triggering record or advancing past it.
+- Counter discontinuities are detected, but their cause is not inferred.
+- Power-loss durability remains unverified until experimentally tested.
+
+### Planned Validation
+
+Run integration tests locally on Raspberry Pi using:
+
+data/local/phase8_mqtt_test.sqlite3
+
+Verify live acquisition, RAW retention, validation, broker PUBACKs and
+SQLite persistence separately.
+
+Exercise publisher interruption, broker unavailability, explicit replay,
+duplicate handling and Arduino counter discontinuities.
+
+Record observed results only after completing the corresponding tests.
+Automatic startup, remote MQTT access and automatic serial reconnection
+remain outside this phase.
+
+### Collector Checks Observed on Windows
+
+The collector now calls flush() and fsync() after each RAW record.
+
+Syntax compilation passed. Tests using a simulated serial port and
+temporary RAW files confirmed:
+
+- Increasing counters 0, 1, 2: three records saved; normal interruption.
+- Repeated counters 0, 1, 1, 2: stopped with exit code 1 after saving
+  the repeated counter; the following record was not read.
+- Decreasing counters 5, 6, 0, 1: stopped with exit code 1 after saving
+  counter 0; the following record was not read.
+- Each test file retained a single collection session ID.
+
+Counter tracking requires a non-empty string device_id and a
+non-negative integer sequence, excluding booleans. It does not require
+the remaining telemetry fields to pass measurement validation.
+
+These checks used no physical Arduino or MQTT broker.
+Power-loss durability and Raspberry Pi behavior remain unverified
+for these changes.
+
+### RAW Publication Validation Checks Observed on Windows
+
+transport/raw_validation.py classifies individual RAW records using
+the existing telemetry validator and checks counters by
+(session_id, device_id).
+
+Synthetic checks passed for:
+
+- Increasing counters with original record values preserved.
+- Repeated and decreasing counters rejected without changing the
+  previous counter.
+- Independent counters across collection sessions.
+- Sensor errors classified separately and included in counter tracking.
+- Invalid measurements with usable identities and counters included
+  in counter tracking.
+- Malformed JSON, non-object records, NaN and invalid UTF-8 rejected.
+- Boolean counters and unexpected devices rejected.
+
+This module does not publish messages or persist publication progress.
+These checks used no Arduino or MQTT broker.
+
+### RAW Source Reader Checks Observed on Windows
+
+transport/raw_source.py reads complete lines from a seekable binary file.
+The maximum line size is 64 KiB, including the newline.
+
+Synthetic checks passed for:
+
+- LF and CRLF lines, and clean end of file.
+- An incomplete live line left unread, then read after its suffix
+  was appended to a temporary file.
+- An incomplete trailing line rejected in completed-file mode.
+- A complete line exactly at the size limit accepted.
+- Oversized lines rejected in both modes without advancing the reader.
+
+Reading a complete line does not prove that the collector has
+synchronized its bytes to storage.
+
+Publication, persistent progress tracking and source-change detection
+are not implemented by this reader.
+
+### RAW Prefix Fingerprint Checks Observed on Windows
+
+prefix_sha256() computes SHA-256 over an exact byte prefix while
+preserving the reader position. Reads are bounded to 1 MiB per chunk.
+
+Synthetic checks passed for:
+
+- Correct fingerprint and unchanged reader position.
+- Appended bytes excluded from the recorded prefix.
+- Modified prefix producing a different fingerprint.
+- Truncation rejected with the reader position restored.
+- Empty prefix accepted and invalid lengths rejected.
+- Prefix spanning multiple read chunks.
+
+The function computes a fingerprint; the future publication journal
+must store and compare it before trusting saved progress.
+It does not identify file replacement or lock the source against changes.
+
+### Publication Lock Checks Observed on Windows
+
+transport/publication_lock.py provides a non-blocking OS lock beside
+a publication journal. All publishers sharing that journal must use it.
+
+Tests with separate Python processes confirmed:
+
+- Concurrent access to the same journal was blocked.
+- The lock was released after normal exit and after an exception.
+- Different journals could be locked independently.
+- Forced termination released the process lock.
+- The lock file remained present after release.
+
+The lock file must not be deleted or replaced while publishers may
+be using it. Its presence alone does not indicate an active lock.
+
+These checks exercised Windows byte-range locking.
+The Linux flock implementation remains unverified on Raspberry Pi.
+The lock does not itself persist publication progress.
+
+### Publication Journal Checks Observed on Windows
+
+transport/publication_journal.py creates, validates, saves and loads
+publication checkpoints.
+
+Each checkpoint contains the source path, device/inode identity,
+processed byte offset, processed line count, prefix SHA-256 and counters
+for broker-confirmed publications, sensor errors and invalid records.
+
+Tests using temporary files confirmed:
+
+- Initial and consistent nonempty checkpoints saved and reloaded.
+- Invalid fields and inconsistent counters or offsets rejected.
+- Saving a journal directly over its RAW source rejected.
+- Simulated atomic replacement failure preserved the previous journal
+  and removed the temporary file.
+- Malformed JSON, non-object journals and NaN rejected.
+- RAW content remained unchanged throughout the tests.
+
+Saving reuses the existing temporary-file, fsync and atomic-replacement
+helper. The caller must hold the publication lock.
+
+These checks do not verify power-loss durability.
+Source verification during recovery, checkpoint advancement and MQTT
+publication remain to be implemented.
+
+### Publication Recovery Checks Observed on Windows
+
+transport/publication_recovery.py verifies source identity and the
+processed prefix fingerprint, then reconstructs sequence tracking
+without publishing previously processed records.
+
+Tests using temporary files confirmed:
+
+- A mixed prefix restored sequence tracking and the saved reader offset.
+- Appended records and an incomplete suffix remained unread.
+- Modified prefixes and truncated sources were rejected.
+- Offsets inside a line and inconsistent line counts were rejected.
+- Classification counters inconsistent with RAW records were rejected.
+- File replacement with identical content was rejected by identity checks.
+- A sequence discontinuity in the processed prefix was rejected.
+- Rejected recovery restored the original reader position.
+
+The caller must hold the publication journal lock and open the RAW
+source in unbuffered binary mode.
+
+Recovery checks do not lock RAW against concurrent modifications.
+Reclassification checks journal consistency; it does not prove previous
+broker PUBACKs or SQLite persistence.
+
+These tests used no MQTT broker. Raspberry Pi recovery behavior remains
+unverified.
+
+### Publication Step Checks Observed on Windows
+
+transport/publication_step.py processes one complete RAW line and saves
+a new checkpoint after the publication callback returns successfully.
+
+The callback contract requires return only after broker PUBACK.
+These tests used a simulated callback, not a real MQTT broker.
+
+Temporary-file tests confirmed:
+
+- Mixed input published only the valid measurement and checkpointed
+  one sensor error and two invalid records.
+- Rejection reports preserved original bytes as Base64.
+- Reaching EOF did not republish checkpointed records.
+- Publication failure left the journal unchanged for retry.
+- Checkpoint failure after simulated publication caused replay.
+- Sequence discontinuity blocked publication and cursor advancement.
+- Rejection-report failure prevented checkpoint advancement.
+- An incomplete live line left the journal unchanged.
+- Input checkpoint objects were not modified.
+
+Rejection reports are stored beside the journal under
+<journal filename>.rejections/, using source line numbers as filenames.
+
+The implementation reconstructs and hashes the processed prefix for
+each step. Its cumulative processing cost grows quadratically with
+file length; large-volume operation has not been evaluated.
+
+Real PUBACK handling, command-line orchestration and Raspberry Pi
+integration remain to be implemented or verified.
+
+### Local Publisher Checks Observed on Windows
+
+transport/local_publisher.py connects to 127.0.0.1:1883 and publishes
+sequentially at QoS 1 with retain disabled.
+
+Module import and client initialization passed.
+Simulated-client checks confirmed:
+
+- Connection parameters and unchanged publication payload.
+- Waiting for publication completion before returning.
+- Clean shutdown when the disconnect callback closes the socket.
+- Rejection of disconnected publication and failed submission.
+- PUBACK wait deadline enforcement.
+- Failure reporting for unexpected disconnection and network-loop errors.
+- Cleanup failure did not replace an existing processing exception.
+
+The client uses MQTT 3.1.1, a clean session and a random client ID.
+Automatic reconnection is disabled.
+PUBACK confirms broker acceptance, not SQLite persistence.
+
+These checks used no real broker. Raspberry Pi MQTT behavior remains
+to be verified.
+
+### RAW Publication Command Checks Observed on Windows
+
+Command: python -m transport.publish_raw
+
+Required options:
+
+- --input: RAW JSONL source.
+- --journal: local publication checkpoint path.
+
+Optional behavior:
+
+- An existing journal resumes after its verified processed prefix.
+- A new journal starts at the beginning.
+- --follow waits for complete lines appended to an active RAW file.
+- --replay explicitly requires a new journal and preserves previous journals.
+- --limit counts lines processed during this execution, including rejections.
+
+Command-line help loaded successfully.
+Tests using temporary files and a simulated publisher confirmed:
+
+- Line limits, mixed classification and journal recovery.
+- Completed records were not republished during normal recovery.
+- Replay required a fresh journal.
+- Publication failure resumed from the last saved checkpoint.
+- Follow mode waited for an incomplete line to be completed.
+- Completed-file mode rejected incomplete trailing input.
+- Interruption returned 130, preserved recovery and released the lock.
+- A journal belonging to another RAW path was rejected before MQTT.
+
+Exit codes are 0 for successful processing, including classified
+rejections; 1 for runtime failure; 2 for argument errors; and 130 for
+handled interruption. Argument-error exit codes were not separately
+tested in these checks.
+
+Broker and serial reconnection remain manual.
+Broker-confirmed counters do not confirm SQLite persistence.
+These tests used no real broker or Arduino.

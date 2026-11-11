@@ -14,6 +14,7 @@ import sys  # Send error messages to the standard error stream.
 import uuid  # Generate a unique identifier for each collection session.
 from datetime import datetime, timezone  # Create timezone-aware UTC timestamps.
 from pathlib import Path  # Build filesystem paths independently of the OS.
+import os  # Synchronize RAW file contents after each record.
 
 import serial  # Provided by the pyserial package; communicates with Arduino.
 
@@ -68,6 +69,8 @@ def main():
 
     # Count records successfully written and flushed during this session.
     saved_count = 0
+    # Track usable sequence counters independently for each device.
+    last_sequences = {}
 
     try:
         # Open the serial port.
@@ -170,12 +173,35 @@ def main():
                         json.dumps(record, allow_nan=False) + "\n"
                     )
 
-                    # Flush Python's file buffer after every record.
-                    # This makes data available to other readers promptly.
-                    # It does not guarantee persistence through power loss.
+                    # Flush Python's buffer, then request file synchronization.
+                    # Power-loss durability still depends on the OS and storage.
                     output.flush()
+                    os.fsync(output.fileno())
 
                     saved_count += 1
+
+                    # Preserve the triggering record before stopping.
+                    device_id = event.get("device_id")
+                    sequence = event.get("sequence")
+
+                    if (
+                        isinstance(device_id, str)
+                        and device_id.strip()
+                        and type(sequence) is int
+                        and sequence >= 0
+                    ):
+                        previous = last_sequences.get(device_id)
+
+                        if previous is not None and sequence <= previous:
+                            raise ValueError(
+                                f"Sequence discontinuity for {device_id}: "
+                                f"previous={previous}, current={sequence}. "
+                                f"Triggering record saved at RAW line "
+                                f"{saved_count}. Restart collection to "
+                                f"create a new session."
+                            )
+
+                        last_sequences[device_id] = sequence
 
                     # Display the Arduino event and the saved-record count.
                     # The file additionally contains the collector metadata.
