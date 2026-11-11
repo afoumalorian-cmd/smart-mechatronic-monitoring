@@ -1043,3 +1043,26 @@ file length; large-volume operation has not been evaluated.
 
 Real PUBACK handling, command-line orchestration and Raspberry Pi
 integration remain to be implemented or verified.
+
+### Local Publisher Checks Observed on Windows
+
+transport/local_publisher.py connects to 127.0.0.1:1883 and publishes
+sequentially at QoS 1 with retain disabled.
+
+Module import and client initialization passed.
+Simulated-client checks confirmed:
+
+- Connection parameters and unchanged publication payload.
+- Waiting for publication completion before returning.
+- Clean shutdown when the disconnect callback closes the socket.
+- Rejection of disconnected publication and failed submission.
+- PUBACK wait deadline enforcement.
+- Failure reporting for unexpected disconnection and network-loop errors.
+- Cleanup failure did not replace an existing processing exception.
+
+The client uses MQTT 3.1.1, a clean session and a random client ID.
+Automatic reconnection is disabled.
+PUBACK confirms broker acceptance, not SQLite persistence.
+
+These checks used no real broker. Raspberry Pi MQTT behavior remains
+to be verified.
